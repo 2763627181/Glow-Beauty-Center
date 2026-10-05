@@ -26,7 +26,7 @@ export default async function PublicLayout({ children }: LayoutProps<"/">) {
   const waHref = waLink(wa, `Hola ${b.name} ✨`);
   const ld = {
     "@context": "https://schema.org", "@type": "BeautySalon", name: b.name, telephone: b.phone || undefined, email: b.email || undefined,
-    address: b.address || undefined, url: process.env.NEXT_PUBLIC_SITE_URL, image: b.logo_url || settings.content.hero_image_url || undefined,
+    address: b.address ? { "@type": "PostalAddress", streetAddress: b.address, addressCountry: "DO" } : undefined, hasMap: b.maps_url || undefined, url: process.env.NEXT_PUBLIC_SITE_URL, image: b.logo_url || settings.content.hero_image_url || undefined,
     sameAs: [b.instagram && `https://instagram.com/${b.instagram.replace(/^@/, "")}`, b.facebook && `https://facebook.com/${b.facebook}`, b.tiktok && `https://tiktok.com/@${b.tiktok.replace(/^@/, "")}`].filter(Boolean),
     priceRange: "RD$",
   };

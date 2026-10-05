@@ -1,0 +1,8 @@
+.box { display: grid; gap: 14px; align-content: start; }
+.facade { display: grid; gap: 10px; justify-items: center; align-content: center; text-align: center; min-height: 280px; padding: 28px; border-radius: 22px; border: var(--border);
+  background: radial-gradient(500px 260px at 80% 0%, var(--color-blush), transparent 70%), linear-gradient(160deg, var(--color-cream), var(--color-marble)); }
+.facade .title { font-family: var(--font-serif); font-size: clamp(1.8rem, 4vw, 2.3rem); line-height: 1.12; color: var(--color-charcoal); }
+.facade p { color: var(--color-text-secondary); max-width: 32ch; }
+.pin { width: 60px; height: 60px; display: grid; place-items: center; border-radius: 50%; background: #fff; color: var(--color-primary-dark); box-shadow: var(--shadow); }
+.map { width: 100%; min-height: 340px; height: 100%; border: 0; border-radius: 22px; background: var(--color-cream); }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }

@@ -21,3 +21,4 @@ export const PhoneIcon = (p: SVGProps<SVGSVGElement>) => (<svg {...base(p)}><pat
 export const ArrowIcon = (p: SVGProps<SVGSVGElement>) => (<svg {...base(p)}><path d="M5 12h14M13 6l6 6-6 6" /></svg>);
 export const ChevronLeftIcon = (p: SVGProps<SVGSVGElement>) => (<svg {...base(p)}><path d="m15 6-6 6 6 6" /></svg>);
 export const ChevronRightIcon = (p: SVGProps<SVGSVGElement>) => (<svg {...base(p)}><path d="m9 6 6 6-6 6" /></svg>);
+export const PinIcon = (p: SVGProps<SVGSVGElement>) => (<svg {...base(p)}><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21Z" /><circle cx="12" cy="9.5" r="2.5" /></svg>);

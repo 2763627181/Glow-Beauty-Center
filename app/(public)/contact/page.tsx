@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { ButtonAnchor } from "@/components/ui/Button";
 import { WhatsAppIcon } from "@/components/ui/Icons";
+import { LocationMap } from "@/components/public/LocationMap";
 import { getSettings } from "@/lib/data/catalog";
 import { waLink } from "@/lib/whatsapp";
 import s from "../page.module.css";
@@ -39,7 +40,8 @@ export default async function ContactPage() {
           {st.policies.text && <p style={{ whiteSpace: "pre-line" }}>{st.policies.text}</p>}
           <div><ButtonAnchor variant="whatsapp" href={waLink(wa, `Hola ${b.name} ✨`)} target="_blank" rel="noopener"><WhatsAppIcon /> Escribir por WhatsApp</ButtonAnchor></div>
         </div>
-        {b.maps_url && (
+        {b.address && <LocationMap name={b.name} address={b.address} mapsUrl={b.maps_url} />}
+        {!b.address && b.maps_url && (
           <a href={b.maps_url} target="_blank" rel="noopener" style={{ display: "grid", placeItems: "center", minHeight: 240, borderRadius: 22, background: "var(--color-cream)", textAlign: "center", padding: 24, fontFamily: "var(--font-serif)", fontSize: "1.6rem" }}>
             Ver cómo llegar en Google Maps →
           </a>
