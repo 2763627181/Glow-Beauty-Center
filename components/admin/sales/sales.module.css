@@ -1,0 +1,11 @@
+.receipt { max-width: 560px; }
+.row { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px dashed rgb(41 37 36 / 0.15); }
+.total { font-weight: 700; font-size: 1.2rem; border-bottom: 0; }
+.biz { text-align: center; margin-bottom: 12px; }
+.biz strong { font-family: var(--font-serif); font-size: 1.8rem; font-weight: 500; display: block; }
+@media print {
+  body * { visibility: hidden; }
+  .receipt, .receipt * { visibility: visible; }
+  .receipt { position: absolute; inset: 0 auto auto 0; width: 100%; max-width: none; box-shadow: none; border: 0; }
+  .noprint { display: none !important; }
+}

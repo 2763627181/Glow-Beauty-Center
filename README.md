@@ -1,36 +1,197 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Glow Beauty Center — web pública, reservas y administración
 
-## Getting Started
+Plataforma completa para un salón de belleza en República Dominicana: sitio web, reservas en línea con disponibilidad real, catálogo, WhatsApp, Google Calendar y un panel de administración (agenda, tablero Kanban, clientes, especialistas, cobros y ventas, reportes, galería, promociones y configuración).
 
-First, run the development server:
+- **Idioma / moneda / zona horaria:** español (es-DO) · RD$ · America/Santo_Domingo.
+- **Todo el contenido sale de la base de datos** y se edita desde el panel: servicios, precios, fotos, textos de la web, horarios, políticas, plantillas de WhatsApp, métodos de pago… No hay precios ni servicios escritos en el código.
+
+## Tecnología
+
+Next.js 16 (App Router) · React 19 · TypeScript · CSS Modules (sin Tailwind) · Motion · Supabase (Postgres, Auth, Storage, Realtime, RLS) · Google Calendar API · Vercel.
+
+## Requisitos
+
+Node.js **20.9 o superior**, una cuenta de Supabase (gratuita sirve para empezar) y, para publicar, una cuenta de Vercel.
+
+## Puesta en marcha (local)
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cd glow
+npm install
+cp .env.example .env.local      # en Windows: copy .env.example .env.local
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+1. **Supabase** → crea un proyecto. En *Authentication → Sign In / Providers* deja **Email** activado y **desactiva “Allow new users to sign up”** (el personal se crea desde el panel; nadie debe poder registrarse solo).
+2. Rellena `.env.local` (tabla más abajo).
+3. **Base de datos** — aplica las migraciones **en este orden** y luego el catálogo:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+   ```bash
+   node --env-file=.env.local scripts/db.mjs \
+     supabase/migrations/20261001000001_schema.sql \
+     supabase/migrations/20261001000002_functions.sql \
+     supabase/migrations/20261001000003_rls.sql \
+     supabase/migrations/20261001000004_client_stats.sql \
+     supabase/migrations/20261001000005_storage_limits.sql \
+     supabase/migrations/20261001000006_user_fk_set_null.sql \
+     supabase/migrations/20261002000007_scheduling_model.sql \
+     supabase/migrations/20261002000008_features.sql \
+     supabase/migrations/20261002000009_hardening.sql \
+     supabase/migrations/20261002000010_clients_and_self_service.sql \
+     supabase/seed/01_catalog.sql
+   # opcional, solo para probar: especialistas y citas de ejemplo
+   node --env-file=.env.local scripts/db.mjs supabase/seed/02_demo.sql
+   ```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+   `01_catalog.sql` carga el catálogo real. **Dos servicios llegaron sin nombre confirmado** (keratina RD$ 2,500 y “2,500 + secado”): quedan en estado *Nombre por confirmar*, inactivos y **no se publican**. Desde *Servicios* les pones el nombre correcto y los activas.
+4. **Primer administrador** — en Supabase → *Authentication → Users → Add user* (con *Auto Confirm User*). El **primer** usuario que existe se convierte automáticamente en **super administrador**; los siguientes los creas desde *Usuarios y permisos*.
+5. `npm run dev` → web en <http://localhost:3000> · panel en <http://localhost:3000/admin/login>.
 
-## Learn More
+> **“HTTP ERROR 431” en localhost:** son cookies acumuladas de otros proyectos en `localhost`. Abre <http://127.0.0.1:3000> o una ventana de incógnito.
+>
+> **`npm run dev` dice que no encuentra `package.json`:** estás en la carpeta equivocada; el proyecto vive dentro de la subcarpeta `glow`.
+>
+> **Carpeta dentro de OneDrive:** OneDrive intenta sincronizar `node_modules` y `.next` (decenas de miles de archivos) y puede volver lento o bloquear el servidor de desarrollo. Lo ideal es mover el proyecto fuera de OneDrive (por ejemplo `C:\dev\glow`) o excluir esas dos carpetas de la sincronización.
 
-To learn more about Next.js, take a look at the following resources:
+### Variables de entorno
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Variable | Dónde | Para qué |
+|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | local + Vercel | URL del proyecto |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | local + Vercel | clave pública (anon/publishable) |
+| `SUPABASE_SERVICE_ROLE_KEY` | local + Vercel, **solo servidor** | reservas públicas, cuentas del personal. Nunca llega al navegador |
+| `DATABASE_URL` | solo local | scripts de migración / verificación / limpieza (no se usa en Vercel) |
+| `NEXT_PUBLIC_WHATSAPP_NUMBER` | local + Vercel | respaldo del WhatsApp (el definitivo se edita en *Configuración → Negocio*) |
+| `NEXT_PUBLIC_SITE_URL` | local + Vercel | dirección pública (SEO, mapa del sitio, vistas previas). En producción, el dominio real |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, `GOOGLE_CALENDAR_ID` | opcional, **solo servidor** | Google Calendar (ver más abajo) |
+| `CRON_SECRET` | opcional | solo si tu proyecto no tiene `pg_cron` (ver *Avisos internos*) |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+`.env.local` está en `.gitignore`: nunca se sube al repositorio.
 
-## Deploy on Vercel
+## Roles y permisos
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Los permisos se **imponen en la base de datos** (RLS y funciones SQL), no solo escondiendo botones.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| | Super admin | Gerente | Recepción | Especialista |
+|---|:-:|:-:|:-:|:-:|
+| Dashboard, Reportes, Servicios, Especialistas, Promociones, Galería, Configuración, Auditoría | ✔ | ✔ | – | – |
+| Usuarios y permisos | ✔ | – | – | – |
+| Agenda, Solicitudes y citas, Tablero | ✔ | ✔ | ✔ | solo **sus** citas |
+| Crear / editar / reprogramar / cancelar citas | ✔ | ✔ | ✔ | – |
+| Iniciar y completar un servicio | ✔ | ✔ | ✔ | solo los suyos |
+| Clientes | ✔ | ✔ | crear y editar | solo lectura de los suyos, **sin montos** |
+| Cobrar, ventas rápidas, ver ventas y cobros | ✔ | ✔ | ✔ | – |
+| Anular ventas, reembolsar, eliminar registros, fusionar clientes | ✔ | ✔ | – | – |
+
+## Qué se edita desde el panel
+
+| Módulo | Qué puedes crear / editar / eliminar |
+|---|---|
+| **Servicios** | servicios (precio, duración, tiempos antes/después, comisión, foto, “desde”, destacado, consulta previa, especialistas que lo hacen), **variantes** (largo del cabello…), **complementos**, categorías (con foto), productos de venta; duplicar, ordenar, activar/ocultar. Los que ya tienen historial se archivan para no perder reportes |
+| **Especialistas** | datos, foto, biografía, comisión, servicios, horario semanal con almuerzo, ausencias/vacaciones, orden, cuenta de acceso |
+| **Solicitudes, Tablero y Agenda** | todo el flujo de la cita (9 estados), arrastrar y soltar, reprogramar, varios servicios con especialistas distintos, notas, WhatsApp, citas manuales y clientes sin cita |
+| **Clientes** | alta, edición, notas privadas, historial, desactivar, **fusionar duplicados**, exportar CSV |
+| **Ventas y Cobros** | cobro con pagos divididos, propina y descuento, venta rápida de mostrador, abonos, anular, reembolsar, recibo imprimible |
+| **Promociones** | combos con precio especial, fechas e imagen; el descuento se aplica solo al reservar |
+| **Galería** | subir fotos (se reducen automáticamente), título, categoría, portada, orden, ocultar, eliminar |
+| **Configuración** | datos del negocio y redes · **textos e imágenes de toda la web** (portada, secciones, pasos, “Nosotros”, páginas de Servicios/Reservar/Contacto, SEO) · horarios, feriados y bloqueos · reglas de reserva y políticas · métodos de pago · plantillas de WhatsApp · integraciones |
+| **Usuarios y permisos** | crear cuentas, cambiar rol, restablecer contraseña, desactivar, eliminar |
+| **Auditoría** | quién hizo qué y cuándo (filtros por módulo y usuario) |
+
+Lo que se guarda aquí se publica en la web **al instante** (no hay que esperar).
+
+## Cómo funcionan las reservas
+
+- La clienta elige servicios (puede combinar cabello + uñas + spa), especialista o “sin preferencia”, día y hora. Solo ve horarios **realmente libres**: se calculan con el horario de cada especialista, almuerzos, ausencias, feriados, bloqueos, citas existentes, duración y tiempos de preparación.
+- Un combo entre varias especialistas se agenda **en secuencia** (cada servicio con su especialista, sin solaparse).
+- La base de datos impide por restricción que una especialista tenga dos citas a la vez, incluso con reservas simultáneas. Hay honeypot anti-bots y un máximo de solicitudes abiertas por teléfono.
+- Los teléfonos dominicanos (809/829/849) se normalizan para no duplicar clientes.
+- Al completar una cita se genera la **venta** en una sola operación, idempotente (no se duplica aunque se repita el clic).
+- Autoservicio: con el número de solicitud + teléfono la clienta consulta y cancela su cita en *Mi cita* (`/booking/manage`), hasta el límite de horas que defines en *Configuración → Reservas*.
+- Estados: solicitud → contactando → contactado → confirmado → en espera → en servicio → completado (o cancelado / no asistió). Cada cambio queda en el historial.
+
+## WhatsApp
+
+El botón flotante, los botones de las tarjetas y los mensajes del panel usan el número de *Configuración → Negocio* (ahora **+1 829 619 8257**). Los mensajes de confirmación / recordatorio / libre son plantillas editables con las variables `{nombre} {servicios} {fecha} {hora} {total} {negocio}`.
+
+## Google Calendar (opcional)
+
+Cada cita se crea en el calendario del salón y se actualiza al cambiar de estado, reprogramarse o cancelarse (y se borra si eliminas la cita). Si Google falla, la reserva **nunca** se afecta: el error queda en *Configuración → Integraciones*. Pasos para conectarlo:
+
+1. [Google Cloud Console](https://console.cloud.google.com) → crea un proyecto → **APIs y servicios → Biblioteca → Google Calendar API → Habilitar**.
+2. **Pantalla de consentimiento OAuth**: tipo *Externo*, agrega tu correo de Google como usuario de prueba y **publícala (“En producción”)**. En modo *Prueba* Google caduca el token a los 7 días.
+3. **Credenciales → Crear credenciales → ID de cliente de OAuth** (aplicación web). En *URI de redireccionamiento autorizados* pon `https://developers.google.com/oauthplayground`. Copia el *Client ID* y el *Client secret*.
+4. Abre [OAuth Playground](https://developers.google.com/oauthplayground) → engranaje ⚙ → marca **Use your own OAuth credentials** y pega tus credenciales → en el paso 1 elige el alcance `https://www.googleapis.com/auth/calendar.events` → *Authorize APIs* con la cuenta dueña del calendario → paso 2 *Exchange authorization code for tokens* → copia el **Refresh token**.
+5. ID del calendario: Google Calendar → ⋮ junto al calendario → *Configuración e uso compartido* → *Integrar el calendario* → **ID del calendario** (para el principal sirve `primary`).
+6. Guarda `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN` y `GOOGLE_CALENDAR_ID` en `.env.local` y en Vercel; reinicia. En *Configuración → Integraciones* debe decir **Conectado**; con “Enviar citas pendientes” subes las que ya existían.
+
+> Probado contra un servidor simulado de Google (`npm run e2e:gcal`): crear, actualizar, reintentar si borraron el evento a mano, cancelar, eliminar y fallo de Google. Con tus credenciales reales haz una reserva de prueba para confirmar el último paso.
+
+## Publicar en Vercel
+
+1. Sube el proyecto a GitHub (la carpeta ya es un repositorio git: `git add . && git commit` y `git remote add origin …`).
+2. Vercel → **Add New → Project** → importa el repositorio (detecta Next.js solo).
+3. En *Environment Variables* agrega todas las de la tabla **menos `DATABASE_URL`**. Pon `NEXT_PUBLIC_SITE_URL` con tu dominio final (`https://tudominio.com`).
+4. **Deploy**. Después añade tu dominio en *Settings → Domains*; si cambias `NEXT_PUBLIC_SITE_URL`, vuelve a desplegar.
+5. En Supabase → *Authentication → URL Configuration*, pon el dominio en **Site URL**.
+6. Elige para Vercel una región cercana al proyecto de Supabase (y a República Dominicana, p. ej. `iad1`).
+
+### Avisos internos (“cita en menos de 1 hora”, “pago pendiente”)
+
+Los genera `pg_cron` dentro de Supabase cada 5 minutos (la migración 08 lo programa). Si tu proyecto no tiene `pg_cron`, define `CRON_SECRET` y programa una llamada cada 5 min a `GET /api/cron/reminders` con la cabecera `Authorization: Bearer <CRON_SECRET>` (en Vercel Pro, con *Cron Jobs*).
+
+## Seguridad
+
+- **Row Level Security** en todas las tablas; funciones sensibles solo para `service_role` o con control de rol; reservas públicas y consultas con rate-limit + restricciones en BD; sin datos privados en la web pública (empleados: solo columnas públicas).
+- **Claves:** `SUPABASE_SERVICE_ROLE_KEY` y las de Google solo existen en el servidor. Si alguna se expone, rótala: Supabase → *Project Settings → API Keys* (service role) y *Database → Reset database password*; actualiza `.env.local` y Vercel.
+- **Desactiva el registro público** en Supabase (paso 1 de la puesta en marcha). Aunque alguien se registrara, una cuenta sin perfil del personal no puede ver ni hacer nada (verificado), pero no hay razón para permitirlo.
+- Cabeceras de seguridad (HSTS, nosniff, referrer, permissions-policy), panel con `noindex` y `no-store`, JSON-LD escapado, exportaciones CSV protegidas contra inyección de fórmulas, subidas limitadas a imágenes de 5 MB.
+- No publiques datos bancarios, cédulas ni fotos con información privada en la galería o en los textos.
+
+## Operación y mantenimiento
+
+- **Respaldos:** los planes de pago de Supabase incluyen copias diarias. En el plan gratuito exporta periódicamente: CSV de *Clientes*, *Citas* y *Reportes* desde el panel, y/o `pg_dump "$DATABASE_URL" -Fc -f respaldo.dump`.
+- **Fotos del salón:** la portada de la web, la página “Nosotros”, la imagen que sale al compartir el enlace por WhatsApp/redes y las primeras fotos de la galería son las **fotos reales del local** de la carpeta `Img del negocio/`. Se publicaron con `node --env-file=.env.local scripts/upload-business-photos.mjs` (se puede repetir sin duplicar; si cambias los archivos de la carpeta, vuelve a correrlo). También puedes cambiarlas cuando quieras desde el panel (*Configuración → Sitio web* y *Galería*).
+- **Fotos de ejemplo:** los servicios, las categorías y el resto de la galería traen fotos de stock para que la web luzca completa desde el primer día. Reemplázalas por las tuyas desde *Servicios*, *Servicios → Categorías* y *Galería* (puedes ocultar o eliminar las de ejemplo una por una).
+- **Especialistas de ejemplo:** *Ana (demo)* y *Carla (demo)* existen solo para que la reserva tenga disponibilidad. Crea a tus especialistas reales (servicios + horario) y luego elimina las demo desde *Especialistas*. `supabase/seed/99_remove_demo.sql` borra de golpe todos los datos demo (citas, ventas y clientes incluidos); si ya hay citas reales asignadas a las demo, reasígnalas o cancélalas antes.
+- **Imágenes huérfanas** (fotos reemplazadas o quitadas): `npm run cleanup:storage` las lista; `npm run cleanup:storage -- --delete` borra las de más de un día.
+- Para cambiar la contraseña de alguien: *Usuarios y permisos → Contraseña*. Cada persona cambia la suya en *Mi cuenta*.
+
+## Pruebas
+
+| Comando | Qué hace |
+|---|---|
+| `npm test` | pruebas unitarias (motor de disponibilidad, reportes, líneas de cita, búsqueda, CSV, evento de Calendar, validaciones) |
+| `npm run typecheck` · `npm run lint` | TypeScript y ESLint |
+| `npm run verify:db` | 113 verificaciones de la base de datos (permisos por rol, ventas, pagos, anti-solapes, autoservicio…) dentro de una transacción que se revierte: no deja datos |
+| `npm run e2e` | pruebas de extremo a extremo con un navegador real (Playwright): web pública y reserva, todo el panel, permisos por rol, escritura tecla por tecla, tiempo real, subida de fotos |
+| `npm run e2e:gcal` | sincronización con Google Calendar contra un servidor simulado |
+| `npm run e2e:a11y` | escaneo de accesibilidad (axe) de la web y del panel |
+
+> ⚠ Las pruebas **E2E escriben y borran datos** en la base de `.env.local` y cambian (y restauran) algunos ajustes. Úsalas con un proyecto de Supabase de pruebas, no durante la operación real. Necesitan los datos demo y, la primera vez, `npx playwright install chromium`. Con la web corriendo (`npm run build && npm start`) ejecuta `npm run e2e`; crea y borra solas los usuarios `tmp-*@glow.test`.
+
+## Estructura
+
+```
+app/
+  (public)/        web pública: inicio, servicios, reservar, mi cita, galería, nosotros, contacto
+  admin/           login y panel (layout con permisos por rol)
+  api/             disponibilidad y respaldo de cron
+components/        public/ · admin/ · ui/
+lib/
+  domain/          reglas puras con pruebas (disponibilidad, reportes, estados, contenido del sitio…)
+  data/            lecturas (cacheadas las públicas, con purga instantánea al guardar en el panel)
+  actions/         Server Actions (reservas, panel)
+  integrations/    Google Calendar
+  supabase/        clientes (servidor, navegador, público, admin)
+supabase/
+  migrations/      esquema, funciones, RLS, endurecimiento
+  seed/            catálogo real, datos demo
+scripts/           migraciones, verificación de BD, limpieza de almacenamiento, publicar fotos del salón, usuarios de prueba
+e2e/               pruebas de navegador
+Img del negocio/   fotos originales del local (se publican con scripts/upload-business-photos.mjs)
+proxy.ts           protege /admin (sesión)
+```
+
+## Fuera de alcance de esta versión
+
+Facturación fiscal (NCF / ITBIS), pagos en línea, avisos automáticos por correo o SMS, varias sucursales y traducción del texto a inglés (la fecha, el idioma y la moneda están centralizados, pero los textos están en español).

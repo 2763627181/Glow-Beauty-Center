@@ -1,0 +1,15 @@
+.backdrop { position: fixed; inset: 0; z-index: 100; background: rgb(41 37 36 / 0.45); display: grid; place-items: end center; padding: 0; }
+.modal { background: var(--color-ivory); width: 100%; max-height: 92vh; display: flex; flex-direction: column; border-radius: 24px 24px 0 0; box-shadow: var(--shadow-lg); outline: none; }
+.head { display: flex; justify-content: space-between; align-items: center; padding: 18px 22px 8px; }
+.head h2 { font-size: 1.6rem; }
+.x { width: 44px; height: 44px; border: 0; background: transparent; border-radius: 50%; display: grid; place-items: center; }
+.x:hover { background: rgb(41 37 36 / 0.06); }
+.body { padding: 8px 22px 24px; overflow: auto; }
+.toasts { position: fixed; right: 16px; bottom: 16px; left: 16px; z-index: 200; display: grid; gap: 8px; justify-items: end; pointer-events: none; }
+.toast { background: var(--color-charcoal); color: #fff; padding: 12px 18px; border-radius: 14px; box-shadow: var(--shadow-lg); font-size: 0.9rem; pointer-events: auto; max-width: 420px; }
+.toastErr { background: var(--color-danger); }
+@media (min-width: 720px) {
+  .backdrop { place-items: center; padding: 24px; }
+  .modal { width: min(100%, 560px); border-radius: 24px; }
+  .wide { width: min(100%, 820px); }
+}

@@ -1,0 +1,11 @@
+.footer { background: var(--color-charcoal); color: #f3ece6; padding: 64px 0 28px; margin-top: 96px; }
+.grid { display: grid; gap: 36px; grid-template-columns: 1fr; }
+.grid nav, .grid > div { display: grid; gap: 8px; align-content: start; }
+.logo { font-family: var(--font-serif); font-size: 2.4rem; line-height: 1; }
+.sub { letter-spacing: 0.32em; text-transform: uppercase; font-size: 0.7rem; color: var(--color-gold-soft); }
+.h { font-family: var(--font-sans); font-size: 0.75rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--color-gold-soft); font-weight: 600; margin-bottom: 4px; }
+.muted { color: #cfc4bc; font-size: 0.92rem; }
+.footer a { color: #f3ece6; font-size: 0.92rem; }
+.footer a:hover { color: var(--color-soft-pink); }
+.copy { margin-top: 48px; padding-top: 20px; border-top: 1px solid rgb(255 255 255 / 0.12); color: #a89d95; font-size: 0.8rem; }
+@media (min-width: 800px) { .grid { grid-template-columns: 1.4fr 1fr 1.2fr 1.2fr; } }

@@ -1,0 +1,12 @@
+.box { position: relative; flex: 1; max-width: 460px; min-width: 0; }
+.input { width: 100%; min-height: 44px; padding: 0 16px; border-radius: 999px; border: 1px solid rgb(41 37 36 / 0.16); background: #fff; font-size: 0.92rem; }
+/* indicador del atajo “/” (solo con teclado físico) */
+.kbd { display: none; position: absolute; right: 14px; top: 50%; transform: translateY(-50%); min-width: 22px; padding: 1px 6px; border: 1px solid rgb(41 37 36 / 0.2); border-bottom-width: 2px; border-radius: 6px; font: 600 0.75rem var(--font-sans); color: var(--color-text-secondary); background: var(--color-ivory); pointer-events: none; text-align: center; }
+@media (hover: hover) and (pointer: fine) { .kbd { display: block; } .input { padding-right: 46px; } }
+.panel { position: absolute; left: 0; right: 0; top: calc(100% + 6px); background: #fff; border: var(--border); border-radius: var(--radius); box-shadow: var(--shadow-lg); max-height: 70vh; overflow: auto; z-index: 60; padding: 6px; }
+.panel section { padding: 4px 0; }
+.panel h3 { font-family: var(--font-sans); font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-gold-text); padding: 6px 10px 2px; }
+.panel a { display: grid; gap: 1px; padding: 8px 10px; border-radius: 10px; font-size: 0.9rem; }
+.panel a:hover, .panel a:focus-visible { background: var(--color-blush); }
+.panel small { color: var(--color-text-secondary); }
+.note { padding: 12px; color: var(--color-text-secondary); font-size: 0.88rem; }

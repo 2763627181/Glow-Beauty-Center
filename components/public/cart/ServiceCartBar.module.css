@@ -1,0 +1,6 @@
+.bar { position: fixed; z-index: 40; left: 12px; right: 12px; bottom: 12px; background: var(--color-charcoal); color: #fff; border-radius: var(--radius-lg); padding: 12px 14px 12px 20px; display: flex; align-items: center; gap: 12px; box-shadow: var(--shadow-lg); max-width: 720px; margin-inline: auto; }
+.info { flex: 1; min-width: 0; display: grid; line-height: 1.25; }
+.info strong { font-size: 0.95rem; }
+.info span { font-size: 0.8rem; opacity: 0.8; }
+.actions { display: flex; gap: 8px; align-items: center; }
+.clear { background: transparent; border: 0; color: #fff; opacity: 0.75; font-size: 0.8rem; text-decoration: underline; min-height: 44px; padding: 0 6px; }

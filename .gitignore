@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+!.env.example
+
+# pruebas E2E (capturas y fotos generadas)
+/e2e/shots/
+/e2e/fixtures/big-photo.jpg

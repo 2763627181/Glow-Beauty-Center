@@ -1,0 +1,4 @@
+.text { font-family: var(--font-serif); font-size: 1.6rem; font-weight: 500; letter-spacing: 0.01em; line-height: 1; display: inline-block; }
+.text small { display: block; font-family: var(--font-sans); font-size: 0.6rem; letter-spacing: 0.32em; text-transform: uppercase; color: var(--color-gold-text); margin-top: 3px; }
+.light small { color: var(--color-gold-soft); }
+.logo { height: 44px; width: auto; max-width: 180px; object-fit: contain; }

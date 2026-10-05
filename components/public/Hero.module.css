@@ -1,0 +1,26 @@
+.hero { position: relative; min-height: 100svh; display: grid; align-items: center; padding: calc(var(--header-h) + 32px) 0 72px; overflow: hidden;
+  background: radial-gradient(900px 500px at 85% 15%, var(--color-blush), transparent 65%), linear-gradient(180deg, var(--color-ivory), var(--color-cream)); }
+.grid { display: grid; gap: 40px; align-items: center; }
+.copy { display: grid; gap: 22px; max-width: 560px; }
+.copy h1 em { font-style: italic; color: var(--color-primary-dark); }
+.lead { font-size: 1.1rem; color: var(--color-text-secondary); max-width: 46ch; }
+.ctas { display: flex; flex-wrap: wrap; gap: 12px; }
+.tags { display: flex; flex-wrap: wrap; gap: 8px; }
+.tag { border: 1px solid rgb(41 37 36 / 0.14); padding: 6px 14px; border-radius: 999px; font-size: 0.8rem; background: rgb(255 255 255 / 0.6); }
+.visual { position: relative; justify-self: center; width: min(100%, 440px); aspect-ratio: 4 / 5; }
+.arch { position: absolute; inset: 0; border-radius: 999px 999px 24px 24px; overflow: hidden;
+  background: linear-gradient(160deg, #fff 0%, var(--color-marble) 45%, var(--color-soft-pink) 100%); box-shadow: var(--shadow-lg); }
+.arch img { width: 100%; height: 100%; object-fit: cover; }
+.vein { position: absolute; inset: 0; opacity: 0.5;
+  background: repeating-linear-gradient(115deg, transparent 0 38px, rgb(120 130 125 / 0.12) 39px 40px, transparent 41px 90px); }
+.ring { position: absolute; inset: -14px; border: 1.5px solid var(--color-champagne); border-radius: 999px 999px 32px 32px; opacity: 0.7; pointer-events: none; }
+.glow { position: absolute; left: 50%; bottom: 14%; width: 70%; aspect-ratio: 1; transform: translateX(-50%); background: radial-gradient(circle, rgb(229 208 155 / 0.55), transparent 65%); filter: blur(10px); }
+.word { position: absolute; inset: auto 0 22% 0; text-align: center; font-family: var(--font-serif); font-size: 5rem; color: rgb(169 85 109 / 0.35); }
+@media (min-width: 900px) { .grid { grid-template-columns: 1.1fr 0.9fr; } }
+
+/* Entrada con CSS puro (se ve igual que antes, pero no espera a JavaScript) */
+.fade { animation: heroFade 0.8s var(--ease) var(--d, 0s) both; }
+.rise { animation: heroRise 1s var(--ease) 0.2s both; }
+@keyframes heroFade { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: none; } }
+@keyframes heroRise { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .fade, .rise { animation: none; } }

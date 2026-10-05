@@ -1,0 +1,8 @@
+.tabs { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 24px; scrollbar-width: none; }
+.tab { flex: none; border: 1px solid rgb(41 37 36 / 0.16); background: transparent; border-radius: 999px; padding: 0 20px; min-height: 44px; }
+.on { background: var(--color-charcoal); color: #fff; border-color: var(--color-charcoal); }
+.grid { display: grid; gap: 12px; grid-template-columns: repeat(2, 1fr); }
+.item { position: relative; margin: 0; aspect-ratio: 4 / 5; border-radius: var(--radius); overflow: hidden; background: var(--color-cream); }
+.item figcaption { position: absolute; inset: auto 0 0 0; padding: 24px 14px 12px; color: #fff; font-size: 0.85rem; background: linear-gradient(transparent, rgb(0 0 0 / 0.55)); }
+.empty { color: var(--color-text-secondary); padding: 48px 0; }
+@media (min-width: 800px) { .grid { grid-template-columns: repeat(4, 1fr); } }

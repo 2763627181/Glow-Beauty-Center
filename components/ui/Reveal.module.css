@@ -1,0 +1,5 @@
+.reveal { opacity: 0; transform: translateY(18px); transition: opacity 0.6s var(--ease), transform 0.6s var(--ease); }
+.in { opacity: 1; transform: none; }
+/* Sin animaciones (preferencia del sistema) o sin JavaScript: el contenido se ve siempre */
+@media (prefers-reduced-motion: reduce) { .reveal { opacity: 1; transform: none; transition: none; } }
+@media (scripting: none) { .reveal { opacity: 1; transform: none; } }

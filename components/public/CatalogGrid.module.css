@@ -1,0 +1,9 @@
+.tabs { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 28px; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tab { flex: none; border: 1px solid rgb(41 37 36 / 0.16); background: transparent; border-radius: 999px; padding: 0 20px; min-height: 44px; font-weight: 500; transition: all 0.2s; }
+.tab:hover { background: #fff; }
+.on { background: var(--color-charcoal); color: #fff; border-color: var(--color-charcoal); }
+.grid { display: grid; gap: 20px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
+.empty { color: var(--color-text-secondary); padding: 40px 0; text-align: center; }
+.grid > div { display: flex; }
+.grid > div > * { flex: 1; min-width: 0; }

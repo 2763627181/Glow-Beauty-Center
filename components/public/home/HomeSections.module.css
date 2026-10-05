@@ -1,0 +1,17 @@
+.tiles { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; grid-template-columns: repeat(2, 1fr); }
+.tile { position: relative; display: block; aspect-ratio: 4 / 5; border-radius: var(--radius-lg); overflow: hidden; background: linear-gradient(135deg, var(--color-blush), var(--color-cream) 60%, var(--color-marble)); transition: transform 0.4s var(--ease), box-shadow 0.4s; }
+.tile:hover { transform: translateY(-3px); box-shadow: var(--shadow); }
+.tile img { transition: transform 0.7s var(--ease); }
+.tile:hover img { transform: scale(1.04); }
+.mark { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--font-serif); font-size: 2.4rem; color: var(--color-taupe); opacity: 0.6; }
+.shade { position: absolute; inset: 0; background: linear-gradient(to top, rgb(41 37 36 / 0.62), rgb(41 37 36 / 0) 55%); }
+.label { position: absolute; left: 16px; right: 16px; bottom: 14px; color: #fff; display: grid; gap: 2px; }
+.label strong { font-family: var(--font-serif); font-weight: 500; font-size: 1.55rem; line-height: 1.1; }
+.label small { font-size: 0.78rem; opacity: 0.9; }
+@media (min-width: 800px) { .tiles { grid-template-columns: repeat(4, 1fr); } }
+
+.gallery { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; grid-template-columns: repeat(2, 1fr); }
+.gallery li { position: relative; aspect-ratio: 1; border-radius: var(--radius); overflow: hidden; background: var(--color-cream); }
+.gallery a { position: absolute; inset: 0; }
+.gallery .big { grid-column: span 2; aspect-ratio: 4 / 3; }
+@media (min-width: 800px) { .gallery { grid-template-columns: repeat(4, 1fr); } .gallery .big { grid-row: span 2; aspect-ratio: auto; } }
