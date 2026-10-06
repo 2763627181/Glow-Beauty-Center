@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { ClientForm } from "@/components/admin/clients/ClientTools";
+import { ExportMenu } from "@/components/admin/ExportMenu";
 import { EmptyState, PageHead } from "@/components/admin/primitives";
 import u from "@/components/admin/ui.module.css";
 import { UrlSearch } from "@/components/admin/UrlSearch";
@@ -22,7 +23,7 @@ export default async function ClientsPage({ searchParams }: PageProps<"/admin/cl
 
   return (
     <>
-      <PageHead title="Clientes" sub={`${total} en total`}>{can(s.role, "reports") && (<a className={u.link} href="/admin/clients/export" download>Exportar CSV</a>)}{allowed(s.role, "manageClients") && <ClientForm label="+ Nuevo cliente" />}</PageHead>
+      <PageHead title="Clientes" sub={`${total} en total`}>{can(s.role, "reports") && <ExportMenu groups={[{ href: "/admin/clients/export" }]} />}{allowed(s.role, "manageClients") && <ClientForm label="+ Nuevo cliente" />}</PageHead>
       <Suspense><UrlSearch placeholder="Buscar por nombre, teléfono o correo" label="Buscar clientes" /></Suspense>
       <div className={u.card} style={{ marginTop: 16 }}>
         {rows.length === 0 ? <EmptyState title="Sin resultados" text={q ? "Prueba con otro nombre o teléfono." : "Aún no hay clientes."} /> : (

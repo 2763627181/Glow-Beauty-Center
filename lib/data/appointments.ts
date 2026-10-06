@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { applyClientSearch, cleanTerm } from "./client-search";
+import { fetchAll } from "./paginate";
 import type { AppointmentSource, AppointmentStatus } from "@/types/domain";
 
 export type ApptService = {
@@ -49,7 +50,7 @@ export type ApptFilter = { from?: string; to?: string; status?: AppointmentStatu
 
 export async function listAppointments(f: ApptFilter = {}): Promise<ApptRow[]> {
   const sb = await createClient();
-  let q = sb.from("appointments").select(SELECT).order("start_time", { ascending: true }).limit(f.limit ?? 300);
+  let q = sb.from("appointments").select(SELECT).order("start_time", { ascending: true }).order("id");
   if (f.from) q = q.gte("start_time", f.from);
   if (f.to) q = q.lt("start_time", f.to);
   if (f.status?.length) q = q.in("status", f.status);
@@ -61,8 +62,8 @@ export async function listAppointments(f: ApptFilter = {}): Promise<ApptRow[]> {
     const term = cleanTerm(f.search);
     q = q.or([ids.length ? `client_id.in.(${ids.join(",")})` : null, `request_number.ilike.%${term}%`].filter(Boolean).join(","));
   }
-  const { data } = await q;
-  let rows = (data ?? []).map(shapeAppointment);
+  const data = await fetchAll((from, to) => q.range(from, to), f.limit ?? 300);
+  let rows = data.map(shapeAppointment);
   if (f.employeeId) rows = rows.filter((a) => a.employee_id === f.employeeId || a.services.some((s) => s.employee_id === f.employeeId));
   return rows;
 }

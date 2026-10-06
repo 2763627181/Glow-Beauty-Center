@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { AppointmentList } from "@/components/admin/appointments/AppointmentList";
 import { NewAppointment } from "@/components/admin/appointments/NewAppointment";
+import { ExportMenu } from "@/components/admin/ExportMenu";
 import { LiveRefresh } from "@/components/admin/LiveRefresh";
 import { PageHead } from "@/components/admin/primitives";
 import { StatusFilter } from "@/components/admin/StatusFilter";
@@ -37,7 +38,7 @@ export default async function AppointmentsPage({ searchParams }: PageProps<"/adm
     <>
       <LiveRefresh />
       <PageHead title="Solicitudes y citas" sub={`${rows.length} resultado${rows.length === 1 ? "" : "s"}`}>
-        {can(s.role, "reports") && <a className={u.link} href={`/admin/appointments/export?${new URLSearchParams({ range, ...(status ? { status } : {}), ...(search ? { q: search } : {}) })}`}>Exportar CSV</a>}
+        {can(s.role, "reports") && <ExportMenu groups={[{ href: `/admin/appointments/export?${new URLSearchParams({ range, ...(status ? { status } : {}), ...(search ? { q: search } : {}) })}` }]} />}
         <NewAppointment />
       </PageHead>
       <div className={u.filters}>

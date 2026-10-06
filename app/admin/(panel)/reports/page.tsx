@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { RankList } from "@/components/admin/charts";
+import { ExportMenu } from "@/components/admin/ExportMenu";
 import { Kpi } from "@/components/admin/KpiCard";
 import { PageHead } from "@/components/admin/primitives";
 import u from "@/components/admin/ui.module.css";
@@ -25,8 +26,7 @@ export default async function ReportsPage({ searchParams }: PageProps<"/admin/re
   return (
     <>
       <PageHead title="Reportes" sub={`${r.fromDay} → ${r.toDay}`}>
-        <a className={u.link} href={`/admin/reports/export?${qs}&type=ventas`}>Exportar ventas (CSV)</a>
-        <a className={u.link} href={`/admin/reports/export?${qs}&type=resumen`}>Exportar resumen (CSV)</a>
+        <ExportMenu groups={[{ label: "Reporte completo", href: `/admin/reports/export?${qs}&type=resumen` }, { label: "Ventas detalladas", href: `/admin/reports/export?${qs}&type=ventas` }]} />
       </PageHead>
       <div className={u.filters}>
         {(Object.keys(RANGE_LABEL) as RangeKey[]).filter((k) => k !== "custom").map((k) => (

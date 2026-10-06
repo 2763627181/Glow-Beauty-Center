@@ -12,6 +12,8 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   // Raíz del proyecto fija: evita que Next busque (y vigile) archivos de carpetas superiores, p. ej. un package-lock.json suelto en el usuario
   turbopack: { root: __dirname },
+  // Librerías de Excel y PDF: se cargan desde node_modules en el servidor (no se empaquetan en el bundle)
+  serverExternalPackages: ["exceljs", "jspdf", "jspdf-autotable"],
   images: {
     formats: ["image/avif", "image/webp"],
     remotePatterns: [

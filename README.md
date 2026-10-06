@@ -89,15 +89,32 @@ Los permisos se **imponen en la base de datos** (RLS y funciones SQL), no solo e
 | **Servicios** | servicios (precio, duración, tiempos antes/después, comisión, foto, “desde”, destacado, consulta previa, especialistas que lo hacen), **variantes** (largo del cabello…), **complementos**, categorías (con foto), productos de venta; duplicar, ordenar, activar/ocultar. Los que ya tienen historial se archivan para no perder reportes |
 | **Especialistas** | datos, foto, biografía, comisión, servicios, horario semanal con almuerzo, ausencias/vacaciones, orden, cuenta de acceso |
 | **Solicitudes, Tablero y Agenda** | todo el flujo de la cita (9 estados), arrastrar y soltar, reprogramar, varios servicios con especialistas distintos, notas, WhatsApp, citas manuales y clientes sin cita |
-| **Clientes** | alta, edición, notas privadas, historial, desactivar, **fusionar duplicados**, exportar CSV |
+| **Clientes** | alta, edición, notas privadas, historial, desactivar, **fusionar duplicados**, exportar a Excel, PDF o CSV |
 | **Ventas y Cobros** | cobro con pagos divididos, propina y descuento, venta rápida de mostrador, abonos, anular, reembolsar, recibo imprimible |
 | **Promociones** | combos con precio especial, fechas e imagen; el descuento se aplica solo al reservar |
 | **Galería** | subir fotos (se reducen automáticamente), título, categoría, portada, orden, ocultar, eliminar |
 | **Configuración** | datos del negocio y redes · **textos e imágenes de toda la web** (portada, secciones, pasos, “Nosotros”, páginas de Servicios/Reservar/Contacto, SEO) · horarios, feriados y bloqueos · reglas de reserva y políticas · métodos de pago · plantillas de WhatsApp · integraciones |
 | **Usuarios y permisos** | crear cuentas, cambiar rol, restablecer contraseña, desactivar, eliminar |
+| **Exportaciones** | botón **Exportar** en *Solicitudes y citas*, *Clientes* y *Reportes* (gerente o super admin): **Excel** (.xlsx con formato, filtros y totales), **PDF** con la marca del negocio, o **CSV** simple. Ver más abajo |
 | **Auditoría** | quién hizo qué y cuándo (filtros por módulo y usuario) |
 
 Lo que se guarda aquí se publica en la web **al instante** (no hay que esperar).
+
+## Exportar a Excel, PDF y CSV
+
+Cada exportación sale del mismo documento, así que los tres formatos siempre coinciden. Usan los filtros de la pantalla (rango, estado, búsqueda) y el nombre, la dirección, el teléfono y el **logo** del negocio (el logo se toma de *Configuración → Negocio* si es PNG o JPG).
+
+| Desde | Qué trae |
+|---|---|
+| **Solicitudes y citas** | indicadores (por atender, completadas, canceladas, ingresos esperados, cobrado, por cobrar); listado de citas con estado en color, cliente, servicios, especialistas, origen, subtotal, descuento, propina, total, pagado y pendiente; resumen por estado, por especialista y por servicio |
+| **Clientes** | indicadores; listado con visitas, total gastado, ticket promedio, cancelaciones, última visita y próxima cita; **mejores clientes** (los 20 que más gastan) y **clientes para reactivar** (activos que no vienen hace más de 90 días) |
+| **Reportes → Reporte completo** | ingresos, ticket promedio, cobrado, propinas, descuentos y conversión; ventas por día, por servicio, por categoría, por especialista (con comisión estimada) y por método de pago; mejores clientes; citas por estado y días y horas con más demanda |
+| **Reportes → Ventas detalladas** | una fila por venta (cliente, servicios, especialistas, descuento, propina, total, pagado, pendiente, estado y métodos de pago) y el detalle de cada artículo con su comisión |
+
+- **Excel:** una hoja «Resumen» (con enlaces a las demás) y una hoja por tabla, con encabezado fijo, filtros, fechas y montos como datos reales (se pueden ordenar y sumar), totales con fórmula y configuración lista para imprimir. Las citas canceladas o que no asistieron no entran en los totales.
+- **PDF:** portada con indicadores, tablas con encabezado de color, estados en color, barras de porcentaje, totales y «Página X de Y». Muestra hasta 2,500 filas por tabla; el Excel y el CSV traen todo.
+- **CSV:** una tabla limpia para importar en otros programas (el reporte completo trae todas las secciones). Va con BOM para que Excel respete las tildes y protegido contra fórmulas maliciosas.
+- Los reportes y listados leen **todas** las filas del período (antes Supabase los cortaba en 1,000).
 
 ## Cómo funcionan las reservas
 
@@ -149,7 +166,7 @@ Los genera `pg_cron` dentro de Supabase cada 5 minutos (la migración 08 lo prog
 
 ## Operación y mantenimiento
 
-- **Respaldos:** los planes de pago de Supabase incluyen copias diarias. En el plan gratuito exporta periódicamente: CSV de *Clientes*, *Citas* y *Reportes* desde el panel, y/o `pg_dump "$DATABASE_URL" -Fc -f respaldo.dump`.
+- **Respaldos:** los planes de pago de Supabase incluyen copias diarias. En el plan gratuito exporta periódicamente: *Clientes*, *Citas* y *Reportes* desde el panel (Excel o CSV), y/o `pg_dump "$DATABASE_URL" -Fc -f respaldo.dump`.
 - **Fotos del salón:** la portada de la web, la página “Nosotros”, la imagen que sale al compartir el enlace por WhatsApp/redes y las primeras fotos de la galería son las **fotos reales del local** de la carpeta `Img del negocio/`. Se publicaron con `node --env-file=.env.local scripts/upload-business-photos.mjs` (se puede repetir sin duplicar; si cambias los archivos de la carpeta, vuelve a correrlo). También puedes cambiarlas cuando quieras desde el panel (*Configuración → Sitio web* y *Galería*).
 - **Fotos de ejemplo:** los servicios, las categorías y el resto de la galería traen fotos de stock para que la web luzca completa desde el primer día. Reemplázalas por las tuyas desde *Servicios*, *Servicios → Categorías* y *Galería* (puedes ocultar o eliminar las de ejemplo una por una).
 - **Especialistas de ejemplo:** *Ana (demo)* y *Carla (demo)* existen solo para que la reserva tenga disponibilidad. Crea a tus especialistas reales (servicios + horario) y luego elimina las demo desde *Especialistas*. `supabase/seed/99_remove_demo.sql` borra de golpe todos los datos demo (citas, ventas y clientes incluidos); si ya hay citas reales asignadas a las demo, reasígnalas o cancélalas antes.
@@ -160,10 +177,10 @@ Los genera `pg_cron` dentro de Supabase cada 5 minutos (la migración 08 lo prog
 
 | Comando | Qué hace |
 |---|---|
-| `npm test` | pruebas unitarias (motor de disponibilidad, reportes, líneas de cita, búsqueda, CSV, evento de Calendar, validaciones) |
+| `npm test` | pruebas unitarias (motor de disponibilidad, reportes, líneas de cita, búsqueda, exportaciones a Excel/PDF/CSV, evento de Calendar, validaciones) |
 | `npm run typecheck` · `npm run lint` | TypeScript y ESLint |
 | `npm run verify:db` | 113 verificaciones de la base de datos (permisos por rol, ventas, pagos, anti-solapes, autoservicio…) dentro de una transacción que se revierte: no deja datos |
-| `npm run e2e` | pruebas de extremo a extremo con un navegador real (Playwright): web pública y reserva, todo el panel, permisos por rol, escritura tecla por tecla, tiempo real, subida de fotos |
+| `npm run e2e` | pruebas de extremo a extremo con un navegador real (Playwright): web pública y reserva, todo el panel, permisos por rol, escritura tecla por tecla, tiempo real, subida de fotos y descarga de las exportaciones |
 | `npm run e2e:gcal` | sincronización con Google Calendar contra un servidor simulado |
 | `npm run e2e:a11y` | escaneo de accesibilidad (axe) de la web y del panel |
 

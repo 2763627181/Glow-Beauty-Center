@@ -1,0 +1,11 @@
+.box { position: relative; display: inline-block; }
+.panel { position: absolute; top: calc(100% + 6px); z-index: 70; width: min(300px, calc(100vw - 32px)); background: #fff; border: var(--border); border-radius: var(--radius); box-shadow: var(--shadow-lg); padding: 6px; display: grid; gap: 4px; }
+.right { right: 0; }
+.left { left: 0; }
+.group { display: grid; gap: 2px; }
+.group + .group { border-top: var(--border); padding-top: 6px; margin-top: 2px; }
+.title { font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-gold-text); font-weight: 600; padding: 6px 10px 2px; }
+.item { display: grid; gap: 1px; text-align: left; padding: 9px 10px; border: 0; border-radius: 10px; background: none; cursor: pointer; font: inherit; color: var(--color-charcoal); min-height: 48px; }
+.item small { color: var(--color-text-secondary); font-size: 0.78rem; }
+.item:hover:not(:disabled), .item:focus-visible { background: var(--color-blush); }
+.item:disabled { opacity: 0.6; cursor: progress; }
