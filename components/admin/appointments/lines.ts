@@ -43,6 +43,13 @@ export function eligibleStaff(serviceId: string | null | undefined, staff: { id:
   return linked.length ? active.filter((s) => linked.includes(s.id)) : active;
 }
 
+/** Para el selector de especialista: las que tienen el servicio marcado y, aparte, el resto de las activas (el personal puede asignar a cualquiera). */
+export function staffChoices(serviceId: string | null | undefined, staff: { id: string; full_name: string; active: boolean }[], links: { employee_id: string; service_id: string }[]) {
+  const usual = eligibleStaff(serviceId, staff, links);
+  const ids = new Set(usual.map((s) => s.id));
+  return { usual, others: staff.filter((s) => s.active && !ids.has(s.id)) };
+}
+
 export const newKey = () => Math.random().toString(36).slice(2, 10);
 
 /** Valida antes de enviar (el servidor valida de nuevo). Devuelve el primer problema o null. */

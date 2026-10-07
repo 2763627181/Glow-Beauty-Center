@@ -6,7 +6,8 @@ import { money } from "@/lib/format";
 import { useAdmin } from "../AdminContext";
 import { NumInput } from "../NumInput";
 import u from "../ui.module.css";
-import { eligibleStaff, newKey, type EditLine } from "./lines";
+import { newKey, type EditLine } from "./lines";
+import { StaffOptions } from "./StaffOptions";
 
 /** Editor de las líneas de una cita: especialista, precio final, cantidad, orden, altas (servicio / producto / concepto) y bajas. */
 export function LinesEditor({ lines, onChange, showStaff = true, showOrder = true, lockedTimed = false }: {
@@ -42,7 +43,7 @@ export function LinesEditor({ lines, onChange, showStaff = true, showOrder = tru
                   <td data-label="Especialista">
                     <select aria-label={`Especialista para ${l.name}`} value={l.employee_id ?? ""} onChange={(e) => set(i, { employee_id: e.target.value || null })} style={{ minHeight: 40, borderRadius: 10, padding: "0 8px", maxWidth: 170 }}>
                       <option value="">Sin asignar</option>
-                      {eligibleStaff(l.service_id, staff, links).map((s) => <option key={s.id} value={s.id}>{s.full_name}</option>)}
+                      <StaffOptions serviceId={l.service_id} staff={staff} links={links} />
                     </select>
                   </td>
                 )}
@@ -70,8 +71,7 @@ export function LinesEditor({ lines, onChange, showStaff = true, showOrder = tru
             const o = options.find((x) => x.key === e.target.value);
             if (!o) return;
             const prev = [...lines].reverse().find((l) => l.timed)?.employee_id ?? null;
-            const elig = eligibleStaff(o.serviceId, staff, links);
-            onChange([...lines, { key: newKey(), service_id: o.serviceId, variant_id: o.variantId, name: o.label, employee_id: elig.some((s) => s.id === prev) ? prev : null, final_price: o.price, quantity: 1, timed: true, listPrice: o.price }]);
+            onChange([...lines, { key: newKey(), service_id: o.serviceId, variant_id: o.variantId, name: o.label, employee_id: prev, final_price: o.price, quantity: 1, timed: true, listPrice: o.price }]);
           }}>
             <option value="">Seleccionar…</option>
             {options.map((o) => <option key={o.key} value={o.key}>{o.label} — {money(o.price)}</option>)}

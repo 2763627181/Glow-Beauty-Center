@@ -5,6 +5,7 @@ import { previewOverlaps } from "@/lib/actions/admin/appointments";
 import type { OverlapHint, TimedLine } from "@/lib/domain/overlap";
 import { fmtTime } from "@/lib/format";
 import { Alert } from "../primitives";
+import { useNow } from "../useNow";
 
 /**
  * Consulta (con una pequeña espera mientras se escribe) si la especialista ya tiene citas a esa hora.
@@ -26,6 +27,13 @@ export function useOverlapHints(start: string | null, lines: TimedLine[], ignore
     return () => { cancelled = true; clearTimeout(t); };
   }, [key]);
   return found.key === key ? found.hints : [];
+}
+
+/** Aviso (no bloquea): la hora elegida ya pasó. Recepción puede registrar una cita que ya se atendió o mover una a una hora pasada. */
+export function PastNotice({ whenISO }: { whenISO: string | null }) {
+  const now = useNow();
+  if (!whenISO || now === null || new Date(whenISO).getTime() >= now - 60_000) return null;
+  return <Alert kind="warn">Esa hora <strong>ya pasó</strong>. Se guardará igual, por ejemplo para registrar una cita que ya se atendió.</Alert>;
 }
 
 const span = (o: { start: string; end: string }) => `${fmtTime(o.start)} – ${fmtTime(o.end)}`;

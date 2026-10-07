@@ -24,7 +24,7 @@ export const DEFAULT_HOURS: Record<string, DayHours> = {
   "4": { open: "09:00", close: "18:00" }, "5": { open: "09:00", close: "18:00" }, "6": { open: "09:00", close: "16:00" },
 };
 export const DEFAULT_BOOKING: BookingRules = {
-  min_notice_hours: 3, max_advance_days: 60, slot_minutes: 15, cancel_hours: 4, max_simultaneous: 2,
+  min_notice_hours: 3, max_advance_days: 60, slot_minutes: 15, cancel_hours: 4, max_simultaneous: 0,
   cancellation_policy: "Cancelaciones con al menos 4 horas de anticipación.",
 };
 
@@ -51,7 +51,7 @@ export function normalizeSettings(map: Record<string, unknown>): BusinessSetting
       min_notice_hours: num(bk.min_notice_hours, DEFAULT_BOOKING.min_notice_hours), max_advance_days: num(bk.max_advance_days, DEFAULT_BOOKING.max_advance_days),
       slot_minutes: num(bk.slot_minutes, DEFAULT_BOOKING.slot_minutes), cancel_hours: num(bk.cancel_hours, DEFAULT_BOOKING.cancel_hours),
       cancellation_policy: s(bk.cancellation_policy, DEFAULT_BOOKING.cancellation_policy),
-      max_simultaneous: Math.min(10, Math.max(1, Math.round(num(bk.max_simultaneous, DEFAULT_BOOKING.max_simultaneous)))),
+      max_simultaneous: Math.min(10, Math.max(0, Math.round(num(bk.max_simultaneous, DEFAULT_BOOKING.max_simultaneous)))), // 0 = sin límite
     },
     policies: { text: s(obj(map.policies).text, "") },
     content,

@@ -36,7 +36,7 @@ export type SlotInput = {
   slotMinutes: number;
   now: number;
   minNoticeHours: number;
-  /** Citas que una especialista puede tener al mismo tiempo (1 = una a la vez). Por defecto 1. */
+  /** Citas que una especialista puede tener al mismo tiempo (1 = una a la vez; 0 = sin límite). Por defecto 1. */
   maxConcurrent?: number;
 };
 
@@ -76,7 +76,7 @@ function orders(n: number): number[][] {
 
 export function computeSlots(input: SlotInput): Slot[] {
   const { date, businessHours, employees, lines, slotMinutes, now, minNoticeHours } = input;
-  const maxConcurrent = Math.max(1, Math.floor(input.maxConcurrent ?? 1));
+  const maxConcurrent = input.maxConcurrent === 0 ? Infinity : Math.max(1, Math.floor(input.maxConcurrent ?? 1));
   if (!businessHours || !lines.length || slotMinutes <= 0 || lines.some((l) => l.minutes <= 0)) return [];
 
   const open = toMs(date, businessHours.open);

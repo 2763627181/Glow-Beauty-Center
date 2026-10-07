@@ -126,6 +126,14 @@ test("el tope mide coincidencias reales: dos citas seguidas no cuentan como dos 
   assert.ok(t.includes("10:00")); // 10:00–11:00 coincide con una sola cita en cada instante
 });
 
+test("tope 0 = sin límite: la hora se ofrece aunque la especialista ya tenga muchas citas", () => {
+  const many = Array.from({ length: 8 }, () => iv("10:00", "11:00"));
+  const t = times({ ...base, maxConcurrent: 0, employees: [{ ...ana, booked: many }] });
+  assert.ok(t.includes("10:00") && t.includes("10:30"));
+  const capped = times({ ...base, maxConcurrent: 8, employees: [{ ...ana, booked: many }] });
+  assert.ok(!capped.includes("10:00"));
+});
+
 test("los bloqueos y ausencias no se pueden compartir aunque el tope sea alto", () => {
   const t = times({ ...base, maxConcurrent: 5, employees: [{ ...ana, busy: [iv("10:00", "11:00")] }] });
   assert.ok(!t.includes("10:00") && !t.includes("10:30"));

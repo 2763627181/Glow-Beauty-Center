@@ -8,9 +8,9 @@ import { money } from "@/lib/format";
 import { useAdmin, useCan } from "../AdminContext";
 import { Alert } from "../primitives";
 import { Modal, useToast } from "../overlay";
-import { OverlapNotice, useOverlapHints } from "./OverlapNotice";
+import { OverlapNotice, PastNotice, useOverlapHints } from "./OverlapNotice";
 import u from "../ui.module.css";
-import { eligibleStaff } from "./lines";
+import { StaffOptions } from "./StaffOptions";
 import { fromLocalInput, toLocalInput } from "./useApptActions";
 
 export type Preset = { start?: string; employeeId?: string; phone?: string; firstName?: string; lastName?: string; email?: string };
@@ -48,10 +48,8 @@ export function NewAppointmentDialog({ mode, preset, onClose }: { mode: Mode; pr
 
   function toggle(key: string, on: boolean) {
     setError(null);
-    const o = options.find((x) => x.key === key)!;
     if (on) {
-      const ok = f.employeeId && eligibleStaff(o.serviceId, staff, links).some((s) => s.id === f.employeeId);
-      setEmpBy((m) => ({ ...m, [key]: ok ? f.employeeId : "" }));
+      setEmpBy((m) => ({ ...m, [key]: f.employeeId })); // la especialista elegida arriba se aplica a cada servicio, lo tenga marcado o no
       setSel((x) => [...x, key]);
     } else setSel((x) => x.filter((k) => k !== key));
   }
@@ -99,7 +97,7 @@ export function NewAppointmentDialog({ mode, preset, onClose }: { mode: Mode; pr
         <div className={u.field}><label htmlFor="n-emp">Especialista (para todos los servicios)</label>
           <select id="n-emp" value={f.employeeId} onChange={(e) => {
             const id = e.target.value; set({ employeeId: id });
-            if (id) setEmpBy((m) => Object.fromEntries(sel.map((k) => [k, eligibleStaff(options.find((o) => o.key === k)!.serviceId, staff, links).some((s) => s.id === id) ? id : m[k] ?? ""])));
+            if (id) setEmpBy((m) => Object.fromEntries(sel.map((k) => [k, id ?? m[k] ?? ""])));
           }}>
             <option value="">Sin asignar</option>
             {staff.filter((s) => s.active).map((s) => <option key={s.id} value={s.id}>{s.full_name}</option>)}
@@ -133,7 +131,7 @@ export function NewAppointmentDialog({ mode, preset, onClose }: { mode: Mode; pr
                 <span>{o.label}</span>
                 <select aria-label={`Especialista para ${o.label}`} value={empBy[o.key] ?? ""} onChange={(e) => setEmpBy((m) => ({ ...m, [o.key]: e.target.value }))} style={{ minHeight: 40, borderRadius: 10, padding: "0 8px" }}>
                   <option value="">Sin asignar</option>
-                  {eligibleStaff(o.serviceId, staff, links).map((s) => <option key={s.id} value={s.id}>{s.full_name}</option>)}
+                  <StaffOptions serviceId={o.serviceId} staff={staff} links={links} />
                 </select>
               </div>
             ))}
@@ -141,6 +139,7 @@ export function NewAppointmentDialog({ mode, preset, onClose }: { mode: Mode; pr
         )}
 
         <div className={`${u.field} ${u.span2}`}><label htmlFor="n-notes">Notas</label><textarea id="n-notes" maxLength={500} value={f.notes} onChange={(e) => set({ notes: e.target.value })} /></div>
+        {mode === "cita" && whenISO && <div className={u.span2}><PastNotice whenISO={whenISO} /></div>}
         {hints.length > 0 && <div className={u.span2} style={{ display: "grid", gap: 6 }}><OverlapNotice hints={hints} /></div>}
         {error && <div className={u.span2}><Alert>{error}</Alert></div>}
         <div className={u.span2}><Button block onClick={submit} disabled={pending || sel.length === 0}>{pending ? "Guardando…" : mode === "walkin" ? "Registrar" : "Crear cita"}</Button></div>

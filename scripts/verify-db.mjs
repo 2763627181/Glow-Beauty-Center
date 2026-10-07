@@ -71,6 +71,13 @@ try {
   await expectErr("rechaza teléfono inválido", ...booking({ first_name: "T", last_name: "X", phone: "123", start_time: t0, services: [{ service_id: man }] }), "invalid_phone");
   await expectErr("exige elegir variante cuando el servicio las tiene", ...booking({ first_name: "T", last_name: "X", phone: "8095557779", start_time: t0, services: [{ service_id: lav }] }), "variant_required");
   await expectErr("rechaza especialista que no realiza el servicio", ...booking({ first_name: "T", last_name: "X", phone: "8095557779", employee_id: carla, start_time: iso(base + 5 * 36e5), services: [{ service_id: man }] }), "employee_cannot_perform");
+  // Recepción y gerencia: sin esa restricción (la web sí la conserva, arriba)
+  await q("savepoint staff1");
+  const okStaff = (await q(...booking({ first_name: "T", last_name: "Y", phone: "8095557780", employee_id: carla, source: "phone", start_time: iso(base + 5 * 36e5), services: [{ service_id: man }] }))).rows[0].r;
+  check("recepción: puede asignar a una especialista que no tiene marcado el servicio", !!okStaff.id);
+  const pastOk = (await q(...booking({ first_name: "T", last_name: "Z", phone: "8095557781", source: "admin", start_time: iso(Date.now() - 5 * 36e5), services: [{ service_id: man }] }))).rows[0].r;
+  check("recepción: puede registrar una cita a una hora que ya pasó (la web no)", !!pastOk.id);
+  await q("rollback to savepoint staff1");
 
   // combo multi-especialista: uñas con Ana → cabello con Carla, en secuencia
   const t1 = base + 24 * 36e5;
@@ -134,11 +141,17 @@ try {
   const timed = (await q("select position, start_time, end_time from appointment_services where appointment_id=$1 and start_time is not null order by position", [e1.id])).rows;
   check("editar cita: las líneas con horario se reordenan en secuencia", timed.length === 2 && +new Date(timed[0].end_time) === +new Date(timed[1].start_time) && +new Date(timed[0].start_time) === +new Date(ed.start_time));
   await expectErr("editar: el descuento no puede superar el subtotal", "select update_appointment($1, $2::jsonb)", [e1.id, JSON.stringify({ discount: 99999, lines: [{ id: eLines[0].id }] })], "discount_exceeds_subtotal");
-  await expectErr("editar: especialista que no hace el servicio", "select update_appointment($1, $2::jsonb)", [e1.id, JSON.stringify({ lines: [{ id: eLines[0].id, employee_id: carla }] })], "employee_cannot_perform");
+  await q("savepoint ed");
+  const reasg = (await q("select update_appointment($1, $2::jsonb) r", [e1.id, JSON.stringify({ lines: [{ id: eLines[0].id, employee_id: carla }] })])).rows[0].r;
+  check("editar: el personal puede asignar a una especialista que no tiene marcado el servicio", !!reasg.id && (await q("select employee_id from appointment_services where id=$1", [eLines[0].id])).rows[0].employee_id === carla);
+  await q("rollback to savepoint ed");
 
   const r1 = (await q("select reschedule_appointment($1, $2, null) r", [e1.id, iso(base + 210 * 36e5)])).rows[0].r;
   check("reprogramar mueve la cita", !!r1.id);
-  await expectErr("reprogramar al pasado se rechaza", "select reschedule_appointment($1, $2, null)", [e1.id, iso(Date.now() - 36e5)], "past_date");
+  await q("savepoint pas");
+  const rPast = (await q("select reschedule_appointment($1, $2, null) r", [e1.id, iso(Date.now() - 36e5)])).rows[0].r;
+  check("reprogramar a una hora que ya pasó se permite al personal", !!rPast.id);
+  await q("rollback to savepoint pas");
   const rOver = (await q("select reschedule_appointment($1, $2, null) r", [e1.id, t0])).rows[0].r;
   check("reprogramar sobre otra cita de la misma especialista se permite", !!rOver.id);
 
@@ -297,26 +310,41 @@ try {
   await asAdmin();
   const tc = iso(base + 700 * 36e5);
   const web = (n, at = tc, extra = {}) => booking({ first_name: "Web", last_name: String(n), phone: "82955512" + String(n).padStart(2, "0"), employee_id: ana, start_time: at, services: [{ service_id: man }], ...extra });
-  await q(...web(10)); await q(...web(11));
-  await expectErr("web: la 3.ª solicitud a la misma hora se rechaza (tope por defecto: 2)", ...web(12), "slot_taken");
-  const endTc = (await q("select max(end_time) e from appointment_services where employee_id=$1 and start_time=$2", [ana, tc])).rows[0].e;
-  await q(...web(13, iso(+new Date(endTc))));
-  check("web: una solicitud que empieza justo cuando terminan las otras sí cabe", true);
+  const cnt = async (at) => Number((await q("select count(*) from appointment_services where employee_id=$1 and active and start_time=$2", [ana, at])).rows[0].count);
+  const setMax = (v) => q("update business_settings set value = jsonb_set(value, '{max_simultaneous}', $1::jsonb) where key='booking'", [JSON.stringify(v)]);
+  await q("update business_settings set value = value - 'max_simultaneous' where key='booking'");
+  for (const n of [10, 11, 12, 13]) await q(...web(n));
+  check("web: sin tope configurado (valor por defecto) se aceptan 4 solicitudes a la misma hora con la misma especialista", (await cnt(tc)) === 4);
   await q(...web(14, tc, { source: "admin" })); await q(...web(15, tc, { source: "phone" }));
-  check("personal: las citas manuales no tienen tope (4.ª y 5.ª a la misma hora)", Number((await q("select count(*) from appointment_services where employee_id=$1 and active and start_time=$2", [ana, tc])).rows[0].count) === 4);
-  await q("update business_settings set value = jsonb_set(value, '{max_simultaneous}', '1') where key='booking'");
+  check("personal: las citas manuales tampoco tienen tope (6 a la misma hora)", (await cnt(tc)) === 6);
+  // Tope 2 explícito
+  await setMax(2);
+  const tc3 = iso(base + 710 * 36e5);
+  await q(...web(30, tc3)); await q(...web(31, tc3));
+  await expectErr("web: con tope 2 la 3.ª solicitud a la misma hora se rechaza", ...web(32, tc3), "slot_taken");
+  const endTc = (await q("select max(end_time) e from appointment_services where employee_id=$1 and start_time=$2", [ana, tc3])).rows[0].e;
+  await q(...web(33, iso(+new Date(endTc))));
+  check("web: una solicitud que empieza justo cuando terminan las otras sí cabe", true);
+  await q(...web(34, tc3, { source: "admin" }));
+  check("personal: con tope 2 en la web, recepción igual puede agendar otra a esa hora", (await cnt(tc3)) === 3);
+  // Tope 1
+  await setMax(1);
   const tc1 = iso(base + 720 * 36e5);
   await q(...web(16, tc1));
   await expectErr("web: con tope 1 la 2.ª solicitud a la misma hora se rechaza", ...web(17, tc1), "slot_taken");
-  await q("update business_settings set value = jsonb_set(value, '{max_simultaneous}', '3') where key='booking'");
-  await q(...web(18, tc1));
-  check("web: subiendo el tope a 3 entra otra solicitud", true);
-  await q(...web(19, tc1));
+  // Tope 3
+  await setMax(3);
+  await q(...web(18, tc1)); await q(...web(19, tc1));
   await expectErr("web: con tope 3 la 4.ª se rechaza", ...web(20, tc1), "slot_taken");
-  await q("update business_settings set value = jsonb_set(value, '{max_simultaneous}', '\"abc\"') where key='booking'");
+  // 0 = sin límite; un valor inválido también equivale a sin límite
+  await setMax(0);
   const tc2 = iso(base + 740 * 36e5);
-  await q(...web(21, tc2)); await q(...web(22, tc2));
-  await expectErr("web: un valor de tope inválido vuelve al valor por defecto (2)", ...web(23, tc2), "slot_taken");
+  for (const n of [21, 22, 23, 24, 25]) await q(...web(n, tc2));
+  check("web: tope 0 = sin límite", (await cnt(tc2)) === 5);
+  await setMax("abc");
+  const tc4 = iso(base + 760 * 36e5);
+  for (const n of [40, 41, 42]) await q(...web(n, tc4));
+  check("web: un valor inválido equivale a sin límite", (await cnt(tc4)) === 3);
   await q("update business_settings set value = value - 'max_simultaneous' where key='booking'");
 
   /* ───────── cumpleaños del personal ───────── */

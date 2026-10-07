@@ -12,7 +12,7 @@ const { browser, page, errors } = await launch();
 setPage(page);
 const dialog = () => page.getByRole("dialog");
 const toast = (t) => page.getByText(t, { exact: false }).first();
-const PHONES = ["8295559101", "8295559102", "8295559103", "8295559104"];
+const PHONES = ["8295559101", "8295559102", "8295559103", "8295559104", "8295559105", "8295559106"];
 const dr = (n) => new Date(Date.now() + n * 864e5).toLocaleDateString("en-CA", { timeZone: "America/Santo_Domingo" });
 const today = dr(0);
 
@@ -141,29 +141,68 @@ try {
     assert(found.length === 0, found.join(" ¦ "));
   });
 
-  section("Reserva en línea: tope de citas simultáneas (editable en Configuración)");
-  await step("Con 3 citas ya a las 11:00, la web NO ofrece esa hora con E2E Ana pero sí con E2E Bea", async () => {
-    const a = await slots(anaId); const b = await slots(beaId); const any = await slots("any");
-    assert(a.slots.length > 0, "E2E Ana debe tener horarios libres otras horas: " + JSON.stringify(a.error));
-    assert(!a.slots.some((s) => s.time === "11:00" || s.time === "11:15"), "E2E Ana ya está al tope a las 11:00");
-    assert(b.slots.some((s) => s.time === "11:00"), "E2E Bea está libre a las 11:00");
-    assert(any.slots.some((s) => s.time === "11:00"), "con 'cualquiera' se ofrece (E2E Bea)");
+  await step("Sin límites en el panel: se puede asignar a una especialista que no tiene marcado el servicio (y el selector la ofrece aparte)", async () => {
+    await page.goto(BASE + "/admin/appointments");
+    await page.getByRole("button", { name: "+ Nueva cita" }).click();
+    await expectVisible(dialog(), "diálogo");
+    await page.locator("#n-phone").fill("829-555-9105"); await page.locator("#n-fn").fill("E2E"); await page.locator("#n-ln").fill("Otra");
+    await page.locator("#n-when").fill(`${DAY}T15:00`);
+    await dialog().locator("label", { hasText: /^Tinte\s*RD\$/ }).locator("input").check();
+    const sel = page.getByLabel("Especialista para Tinte");
+    const hacen = (await q(`select e.full_name from employee_services es join employees e on e.id=es.employee_id join services s on s.id=es.service_id where s.name='Tinte' and e.active`)).map((r) => r.full_name).sort();
+    assert(hacen.length > 0, "alguien debe tener marcado Tinte");
+    assert((await sel.locator("optgroup[label='Hacen este servicio'] option").allTextContents()).sort().join() === hacen.join(), "primero, quienes tienen marcado Tinte: " + hacen.join(", "));
+    assert((await sel.locator("optgroup[label='Otras especialistas'] option", { hasText: "E2E Ana" }).count()) === 1, "E2E Ana (que no hace Tinte) debe aparecer en «Otras especialistas»");
+    await sel.selectOption({ label: "E2E Ana" });
+    await dialog().getByRole("button", { name: "Crear cita" }).click();
+    await expectVisible(toast("Cita creada"), "toast", 10000);
+    const [r] = await q(`select l.employee_id from appointment_services l join appointments a on a.id=l.appointment_id join clients c on c.id=a.client_id where c.phone_normalized='8295559105'`);
+    assert(r.employee_id === anaId, "la línea quedó con E2E Ana");
   });
-  await step("Configuración → Reservas: el campo se guarda y la web ofrece de nuevo la hora", async () => {
+  await step("Sin límites en el panel: se puede registrar una cita de ayer (avisa que la hora ya pasó pero la guarda)", async () => {
+    await page.goto(BASE + "/admin/appointments");
+    await page.getByRole("button", { name: "+ Nueva cita" }).click();
+    await expectVisible(dialog(), "diálogo");
+    await page.locator("#n-phone").fill("829-555-9106"); await page.locator("#n-fn").fill("E2E"); await page.locator("#n-ln").fill("Ayer");
+    await page.locator("#n-when").fill(`${dr(-1)}T09:00`);
+    await page.locator("#n-emp").selectOption({ label: "E2E Ana" });
+    await page.getByLabel("Buscar servicio").fill("Lavado");
+    await page.getByRole("checkbox", { name: /Lavado y Secado.*Pelo corto/ }).check();
+    await expectVisible(dialog().getByText(/ya pasó/), "aviso de hora pasada", 10000);
+    await dialog().getByRole("button", { name: "Crear cita" }).click();
+    await expectVisible(toast("Cita creada"), "toast", 10000);
+    const [r] = await q(`select (a.start_time at time zone 'America/Santo_Domingo')::text s from appointments a join clients c on c.id=a.client_id where c.phone_normalized='8295559106'`);
+    assert(r.s.startsWith(dr(-1) + " 09:00"), "guardada para ayer: " + r.s);
+  });
+
+  section("Reserva en línea: tope de citas simultáneas (editable en Configuración)");
+  await step("Por defecto la web no tiene tope: con 3 citas ya a las 11:00 sigue ofreciendo esa hora con E2E Ana", async () => {
+    const a = await slots(anaId); const any = await slots("any");
+    assert(a.slots.some((s) => s.time === "11:00" && true), "sin tope, E2E Ana se ofrece a las 11:00 aunque ya tenga 3 citas: " + JSON.stringify(a.error));
+    assert(any.slots.some((s) => s.time === "11:00"), "con 'cualquiera' también");
+  });
+  await step("Configuración → Reservas: muestra «0 = sin límite»; con 2 la web deja de ofrecer la hora llena y con 0 vuelve a ofrecerla", async () => {
     await page.goto(BASE + "/admin/settings?tab=reservas");
     await expectVisible(page.getByLabel(/Citas al mismo tiempo por especialista/), "campo de citas simultáneas");
-    await page.locator("#bk-sim").fill("5");
+    assert((await page.locator("#bk-sim").inputValue()) === "0", "el valor por defecto es 0 (sin límite)");
+    await expectVisible(page.getByText(/0 = sin límite/), "explicación");
+    await page.locator("#bk-sim").fill("2");
     await page.getByRole("button", { name: "Guardar reservas" }).click();
     await expectVisible(toast("Reservas guardadas"), "toast", 10000);
-    assert((await q(`select (value->>'max_simultaneous')::int m from business_settings where key='booking'`))[0].m === 5, "ajuste guardado");
-    await until(async () => (await slots(anaId)).slots.some((s) => s.time === "11:00"), "con tope 5 vuelve a ofrecerse 11:00 (la caché pública dura unos minutos)", 20000);
+    assert((await q(`select (value->>'max_simultaneous')::int m from business_settings where key='booking'`))[0].m === 2, "ajuste guardado");
+    await until(async () => { const a = await slots(anaId); return !a.slots.some((s) => s.time === "11:00") && a.slots.length > 0; }, "con tope 2 y 3 citas, E2E Ana ya no se ofrece a las 11:00", 20000);
+    assert((await slots(beaId)).slots.some((s) => s.time === "11:00"), "E2E Bea (libre) sí se ofrece");
+    await page.locator("#bk-sim").fill("0");
+    await page.getByRole("button", { name: "Guardar reservas" }).click();
+    await until(async () => (await q(`select (value->>'max_simultaneous')::int m from business_settings where key='booking'`))[0].m === 0, "ajuste guardado en 0", 10000);
+    await until(async () => (await slots(anaId)).slots.some((s) => s.time === "11:00"), "con 0 (sin límite) vuelve a ofrecerse", 20000);
   });
-  await step("El tope no acepta valores fuera de 1 a 10", async () => {
+  await step("El tope no acepta valores fuera de 0 a 10", async () => {
     await page.goto(BASE + "/admin/settings?tab=reservas");
     await page.locator("#bk-sim").fill("11");
     await page.getByRole("button", { name: "Guardar reservas" }).click();
     await expectVisible(page.getByText(/Máximo 10/), "mensaje de máximo", 10000);
-    assert((await q(`select (value->>'max_simultaneous')::int m from business_settings where key='booking'`))[0].m === 5, "no debe cambiar");
+    assert((await q(`select (value->>'max_simultaneous')::int m from business_settings where key='booking'`))[0].m === 0, "no debe cambiar");
   });
 
   await step("Reserva real desde la web (el caso del dueño): 1 servicio de RD$ 600 → hay horarios y la solicitud se crea", async () => {

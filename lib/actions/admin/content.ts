@@ -110,7 +110,7 @@ const schemas = {
     min_notice_hours: z.number().min(0).max(240), max_advance_days: z.number().min(1).max(365),
     slot_minutes: z.number().refine((n) => [10, 15, 20, 30, 60].includes(n), "Intervalo no válido"),
     cancel_hours: z.number().min(0).max(240), cancellation_policy: z.string().max(400),
-    max_simultaneous: z.number().int("Debe ser un número entero").min(1, "Mínimo 1").max(10, "Máximo 10"),
+    max_simultaneous: z.number().int("Debe ser un número entero").min(0, "Mínimo 0 (sin límite)").max(10, "Máximo 10"),
   }),
   policies: z.object({ text: z.string().max(3000) }),
   site_content: z.object({

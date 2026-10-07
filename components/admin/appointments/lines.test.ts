@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { eligibleStaff, linesFromAppt, linesToPayload, subtotalOf, validateLines, type EditLine } from "./lines.ts";
+import { eligibleStaff, staffChoices, linesFromAppt, linesToPayload, subtotalOf, validateLines, type EditLine } from "./lines.ts";
 
 const src = [
   { id: "a1", service_id: "s1", name: "Manicure", price: 600, final_price: 650, quantity: 1, employee_id: "ana", start_time: "2026-10-05T14:00:00Z" },
@@ -32,6 +32,15 @@ test("especialistas elegibles: vinculados o todos los activos", () => {
   assert.deepEqual(eligibleStaff("s1", staff, links).map((s) => s.id), ["ana"]);
   assert.deepEqual(eligibleStaff("s2", staff, links).map((s) => s.id), ["ana", "carla"]);
   assert.deepEqual(eligibleStaff(null, staff, links).map((s) => s.id), ["ana", "carla"]);
+});
+
+test("selector de especialista: las que hacen el servicio primero y, aparte, cualquier otra activa", () => {
+  const staff = [{ id: "ana", full_name: "Ana", active: true }, { id: "carla", full_name: "Carla", active: true }, { id: "old", full_name: "Vieja", active: false }];
+  const links = [{ employee_id: "ana", service_id: "s1" }];
+  const c = staffChoices("s1", staff, links);
+  assert.deepEqual(c.usual.map((s) => s.id), ["ana"]);
+  assert.deepEqual(c.others.map((s) => s.id), ["carla"]); // Carla no lo tiene marcado, pero se le puede asignar; la inactiva nunca
+  assert.deepEqual(staffChoices("s2", staff, links).others, []); // sin vínculos: todas las activas ya están en la primera lista
 });
 
 test("validación local", () => {
