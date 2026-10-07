@@ -1,5 +1,6 @@
 "use client";
 
+import { serviceNames } from "@/lib/domain/serviceLines";
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import type { ApptRow } from "@/lib/data/appointments";
@@ -27,7 +28,7 @@ export function AppointmentList({ items }: { items: ApptRow[] }) {
               <tr key={a.id}>
                 <td data-label="Fecha">{fmtDate(a.start_time, { day: "numeric", month: "short" })} · {fmtTime(a.start_time)}</td>
                 <td data-label="Cliente"><strong>{a.client.first_name} {a.client.last_name}</strong><br /><span className={u.sub}>{a.client.phone}</span></td>
-                <td data-label="Servicios">{a.services.map((s) => s.name).join(", ")}</td>
+                <td data-label="Servicios">{serviceNames(a.services).join(", ")}</td>
                 <td data-label="Especialista">{a.employees.length ? a.employees.map((e) => e.name).join(" + ") : "—"}</td>
                 <td data-label="Origen">{SOURCE_LABEL[a.source]}</td>
                 {money$ && <td data-label="Total" className={u.num}>{money(a.final_total ?? apptTotal(a))}</td>}

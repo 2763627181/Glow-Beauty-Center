@@ -1,5 +1,6 @@
 "use server";
 
+import { expandTeams } from "@/lib/domain/teams";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAccess, requireAction } from "@/lib/auth";
@@ -42,7 +43,7 @@ export async function previewOverlaps(input: { start: string; lines: TimedLine[]
   await requireAction("manageAppointments");
   const p = z.object({
     start: z.iso.datetime(), ignoreAppointmentId: z.uuid().optional(),
-    lines: z.array(z.object({ employeeId: z.uuid().nullable(), minutes: z.number().min(0).max(1440) })).max(30),
+    lines: z.array(z.object({ employeeId: z.uuid().nullable(), minutes: z.number().min(0).max(1440), parallel: z.boolean().optional() })).max(30),
   }).safeParse(input);
   if (!p.success) return [];
   const spans = lineSpans(new Date(p.data.start).getTime(), p.data.lines);
@@ -82,6 +83,10 @@ const lineSchema = z.object({
   name: z.string().trim().max(120).optional(),
   final_price: z.number().min(0, "El precio no puede ser negativo").optional(),
   quantity: z.number().int().min(1).max(50).optional(),
+  /** Empieza junto con la línea anterior. */
+  parallel: z.boolean().optional(),
+  /** Clave del equipo: las líneas que la comparten son un mismo servicio atendido por varias especialistas (null = sin equipo). */
+  team: z.string().max(60).nullish(),
 });
 const updateSchema = z.object({
   start_time: z.iso.datetime().optional(), notes: z.string().max(500).nullish(), source: z.enum(["website", "admin", "whatsapp", "phone", "walk_in", "instagram"]).optional(),
@@ -216,7 +221,8 @@ const manualSchema = z.object({
   source: z.enum(["admin", "whatsapp", "phone", "walk_in", "instagram"]),
   start: z.iso.datetime(),
   status: z.enum(["solicitud", "confirmado", "en_espera", "en_servicio"]),
-  items: z.array(selectionSchema.extend({ employeeId: z.uuid().nullish() })).min(1, "Selecciona al menos un servicio"),
+  // employeeIds: las especialistas del servicio (varias = trabajan a la vez); parallel: empieza junto con el servicio anterior
+  items: z.array(selectionSchema.extend({ employeeId: z.uuid().nullish(), parallel: z.boolean().optional() })).min(1, "Selecciona al menos un servicio"),
   notes: z.string().max(500).optional(),
 });
 export type ManualAppointmentInput = z.input<typeof manualSchema>;
@@ -230,7 +236,10 @@ export async function createManualAppointment(input: ManualAppointmentInput): Pr
     p: {
       first_name: d.firstName, last_name: d.lastName, phone: d.phone, email: d.email || null, notes: d.notes ?? null,
       source: d.source, start_time: d.start, status: d.status, created_by: s.userId,
-      services: d.items.map((i) => ({ service_id: i.serviceId, variant_id: i.variantId ?? null, addon_ids: i.addonIds, employee_id: i.employeeId ?? null })),
+      // Un servicio con varias especialistas son varias líneas «al mismo tiempo» con la misma clave de equipo; el precio se reparte en la base de datos
+      services: expandTeams(d.items.map((i) => ({ ...i, employeeIds: i.employeeIds.length ? i.employeeIds : i.employeeId ? [i.employeeId] : [] }))).map((l) => ({
+        service_id: l.item.serviceId, variant_id: l.item.variantId ?? null, addon_ids: l.item.addonIds, employee_id: l.employeeId, parallel: l.parallel, team: l.team,
+      })),
     },
   });
   if (error) return fail(error.message);

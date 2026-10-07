@@ -17,7 +17,7 @@ import { StepDateTime } from "./StepDateTime";
 import { StepDetails } from "./StepDetails";
 import { StepServices } from "./StepServices";
 import { StepSpecialist } from "./StepSpecialist";
-import { emptyForm, STEPS, type BookingForm } from "./state";
+import { effectiveMinutes, emptyForm, STEPS, type BookingForm } from "./state";
 
 type Props = { employees: Employee[]; links: { employee_id: string; service_id: string }[]; maxDays: number; policy: string; businessName: string };
 const CUSTOMER_KEY = "glow-customer-v1";
@@ -45,7 +45,10 @@ export function BookingFlow({ employees, links, maxDays, policy, businessName }:
   }, []);
 
   // Si cambian los servicios, el horario elegido deja de ser válido
-  const itemsKey = JSON.stringify(cart.items.map((i) => [i.serviceId, i.variantId, i.addonIds]));
+  const itemsKey = JSON.stringify([cart.items.map((i) => [i.serviceId, i.variantId, i.addonIds, form.staff[i.serviceId] ?? []]), form.parallel]);
+  /** Servicios con la(s) especialista(s) que eligió la clienta para cada uno. */
+  const selection = cart.items.map((i) => ({ ...i, employeeIds: form.staff[i.serviceId] ?? [] }));
+  const minutes = effectiveMinutes(cart.minutes, cart.lines.map((l) => l.duration), form.parallel);
   const slot = form.slot && form.slotKey === itemsKey ? form.slot : null;
   const view: BookingForm = { ...form, slot };
   const set = (patch: Partial<BookingForm>) => setForm((f) => ({ ...f, ...patch, ...(patch.slot ? { slotKey: itemsKey } : {}) }));
@@ -74,7 +77,7 @@ export function BookingFlow({ employees, links, maxDays, policy, businessName }:
     if (!slot) return goTo(2);
     start(async () => {
       const res = await createPublicBooking({
-        items: cart.items, employeeId: form.employeeId, start: slot.start, date: form.date, promotionId: cart.promo?.id ?? null,
+        items: selection, employeeId: "any", parallel: form.parallel, start: slot.start, date: form.date, promotionId: cart.promo?.id ?? null,
         firstName: form.firstName, lastName: form.lastName, phone: form.phone, email: form.email, notes: form.notes, website: form.website,
       });
       if (!res.ok) {
@@ -88,7 +91,7 @@ export function BookingFlow({ employees, links, maxDays, policy, businessName }:
       } catch {}
       setDone({
         requestNumber: res.requestNumber, name: `${form.firstName} ${form.lastName}`.trim(), date: form.date,
-        time: slot.time, start: slot.start, durationMin: cart.minutes, phone: form.phone,
+        time: slot.time, start: slot.start, durationMin: minutes, phone: form.phone,
         lines: cart.lines.map((l) => ({ name: l.name, price: l.price })), total: res.total, whatsappNumber: cart.whatsappNumber,
       });
       cart.clear();

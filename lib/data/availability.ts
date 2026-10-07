@@ -1,11 +1,18 @@
 import "server-only";
-import { computeSlots, weekdayOf, type EmployeeDay, type Interval, type LineReq, type Slot } from "@/lib/domain/availability";
+import { computeSlots, totalMinutesOf, weekdayOf, type EmployeeDay, type Interval, type Slot } from "@/lib/domain/availability";
+import { buildLinePlan, type PlanLine } from "@/lib/domain/lineplan";
 import { normalizeSettings } from "@/lib/domain/settings";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { SelectionItem } from "@/types/domain";
 
-export type SlotQuery = { date: string; items: SelectionItem[]; employeeId: string | "any" };
-export type SlotResult = { slots: Slot[]; totalMinutes: number; items: SelectionItem[]; error?: string };
+/**
+ * `items[].employeeIds`: especialistas elegidas para ese servicio (varias = un equipo que lo atiende a la vez; ninguna = cualquiera
+ * disponible). `parallel`: cada servicio empieza junto con el anterior. `employeeId` es el formato anterior (una sola especialista
+ * para todo) y se sigue aceptando.
+ */
+export type SlotQuery = { date: string; items: SelectionItem[]; employeeId?: string | "any"; parallel?: boolean };
+/** `plan[lineIndex]`: a qué servicio de `items` pertenece cada línea de las asignaciones y a qué equipo. */
+export type SlotResult = { slots: Slot[]; totalMinutes: number; items: SelectionItem[]; plan: PlanLine[]; error?: string };
 
 const ms = (iso: string) => new Date(iso).getTime();
 const hhmm = (t?: string | null) => (t ? t.slice(0, 5) : null);
@@ -38,43 +45,38 @@ async function resolveLines(items: SelectionItem[]): Promise<{ minutes: number; 
 }
 
 export async function getAvailableSlots(q: SlotQuery): Promise<SlotResult> {
-  const fail = (error: string): SlotResult => ({ slots: [], totalMinutes: 0, items: q.items, error });
+  const fail = (error: string): SlotResult => ({ slots: [], totalMinutes: 0, items: q.items, plan: [], error });
   const db = createAdminClient();
   const resolved = await resolveLines(q.items);
   if (!resolved) return fail("Alguno de los servicios ya no está disponible. Revisa tu selección.");
-  const totalMinutes = resolved.reduce((t, l) => t + l.minutes, 0);
+  const sumMinutes = resolved.reduce((t, l) => t + l.minutes, 0);
 
   const { data: settingsRows } = await db.from("business_settings").select("key,value").in("key", ["hours", "booking"]);
   const settings = normalizeSettings(Object.fromEntries((settingsRows ?? []).map((r) => [r.key, r.value])));
   const weekday = weekdayOf(q.date);
   const now = Date.now();
-  if (ms(`${q.date}T23:59:59-04:00`) < now) return { slots: [], totalMinutes, items: q.items, error: "Esa fecha ya pasó." };
+  if (ms(`${q.date}T23:59:59-04:00`) < now) return { slots: [], totalMinutes: sumMinutes, items: q.items, plan: [], error: "Esa fecha ya pasó." };
   if (ms(`${q.date}T00:00:00-04:00`) > now + settings.booking.max_advance_days * 86_400_000) {
-    return { slots: [], totalMinutes, items: q.items, error: `Solo se puede reservar con hasta ${settings.booking.max_advance_days} días de anticipación.` };
+    return { slots: [], totalMinutes: sumMinutes, items: q.items, plan: [], error: `Solo se puede reservar con hasta ${settings.booking.max_advance_days} días de anticipación.` };
   }
 
-  // Especialistas por línea
+  // Especialistas por línea: activas y visibles en la web, con el servicio marcado (o cualquiera si nadie lo tiene marcado)
   const serviceIds = [...new Set(resolved.map((l) => l.serviceId))];
   const [{ data: emps }, { data: links }] = await Promise.all([
-    db.from("employees").select("id").eq("active", true).eq("accepts_online_booking", true),
+    db.from("employees").select("id,full_name").eq("active", true).eq("accepts_online_booking", true),
     db.from("employee_services").select("employee_id,service_id").in("service_id", serviceIds),
   ]);
-  const allIds = (emps ?? []).map((e) => e.id as string);
-  const lineReqs: LineReq[] = resolved.map((l) => {
-    const linked = (links ?? []).filter((x) => x.service_id === l.serviceId).map((x) => x.employee_id as string);
-    let eligible = linked.length ? allIds.filter((id) => linked.includes(id)) : allIds;
-    if (q.employeeId !== "any") eligible = eligible.filter((id) => id === q.employeeId);
-    return { minutes: l.minutes, eligible };
+  const online = (emps ?? []).map((e) => e.id as string);
+  const names = new Map((emps ?? []).map((e) => [e.id as string, e.full_name as string]));
+  const linked: Record<string, string[]> = {};
+  for (const l of links ?? []) (linked[l.service_id as string] ??= []).push(l.employee_id as string);
+  const built = buildLinePlan({
+    items: q.items.map((it, i) => ({ serviceId: it.serviceId, name: resolved[i].name, minutes: resolved[i].minutes, employeeIds: it.employeeIds ?? [] })),
+    online, linked, legacyEmployeeId: q.employeeId, parallel: !!q.parallel, nameOf: (id) => names.get(id) ?? "Esa especialista",
   });
-  const nobody = lineReqs.findIndex((l) => l.eligible.length === 0);
-  if (nobody >= 0) {
-    return {
-      slots: [], totalMinutes, items: q.items,
-      error: q.employeeId === "any"
-        ? `Por ahora no hay una especialista disponible para «${resolved[nobody].name}». Escríbenos por WhatsApp y te ayudamos a agendar.`
-        : "Esa especialista no realiza todos los servicios elegidos.",
-    };
-  }
+  const totalMinutes = built.lines.length ? totalMinutesOf(built.lines) : sumMinutes;
+  if (built.error) return { slots: [], totalMinutes, items: q.items, plan: [], error: built.error };
+  const lineReqs = built.lines;
   const pool = [...new Set(lineReqs.flatMap((l) => l.eligible))];
 
   const dayStart = `${q.date}T00:00:00-04:00`;
@@ -109,5 +111,5 @@ export async function getAvailableSlots(q: SlotQuery): Promise<SlotResult> {
     employees, lines: lineReqs, slotMinutes: settings.booking.slot_minutes, now, minNoticeHours: settings.booking.min_notice_hours,
     maxConcurrent: settings.booking.max_simultaneous,
   });
-  return { slots, totalMinutes, items: q.items };
+  return { slots, totalMinutes, items: q.items, plan: built.plan };
 }

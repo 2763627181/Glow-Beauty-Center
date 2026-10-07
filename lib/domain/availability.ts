@@ -2,9 +2,11 @@
  * Motor de disponibilidad (puro, sin I/O). Todas las horas se calculan en hora de
  * Santo Domingo (UTC-4, sin horario de verano).
  *
- * Una reserva son varias LÍNEAS (servicios) que se agendan en secuencia. Cada línea
- * puede hacerla un especialista distinto, así un combo (uñas con Ana + cabello con
- * Carla) siempre encuentra horario si cada tramo tiene a alguien libre.
+ * Una reserva son varias LÍNEAS (servicios). Por defecto se agendan en secuencia y cada línea puede hacerla una
+ * especialista distinta, así un combo (uñas con Ana + cabello con Carla) siempre encuentra horario si cada tramo tiene a
+ * alguien libre. Una línea marcada `parallel` empieza junto con la anterior (manicure con una especialista y pedicure con
+ * otra a la vez) y forma con ella un BLOQUE que dura lo que dure su línea más larga. Un servicio atendido por varias
+ * especialistas a la vez (un equipo) son varias líneas del mismo bloque, una por especialista.
  */
 
 export type Interval = { start: number; end: number }; // epoch ms
@@ -24,6 +26,8 @@ export type LineReq = {
   minutes: number;
   /** Especialistas que pueden hacerla (ya filtrados por la elección del cliente). */
   eligible: string[];
+  /** Empieza junto con la línea anterior (mismo bloque). La primera línea nunca es paralela. */
+  parallel?: boolean;
 };
 
 export type SlotInput = {
@@ -61,7 +65,19 @@ export function maxDepth(list: Interval[], a: number, b: number): number {
 }
 const pad = (n: number) => String(n).padStart(2, "0");
 
-/** Permutaciones de índices; la primera siempre es el orden original. Se limita a 4 líneas (24 órdenes). */
+/** Agrupa las líneas en bloques consecutivos: una línea `parallel` se une al bloque de la anterior. */
+export function toBlocks(lines: { parallel?: boolean }[]): number[][] {
+  const blocks: number[][] = [];
+  lines.forEach((l, i) => { if (i > 0 && l.parallel) blocks[blocks.length - 1].push(i); else blocks.push([i]); });
+  return blocks;
+}
+
+/** Minutos totales de una reserva: los bloques van uno tras otro y cada bloque dura lo de su línea más larga. */
+export function totalMinutesOf(lines: { minutes: number; parallel?: boolean }[]): number {
+  return toBlocks(lines).reduce((t, b) => t + Math.max(...b.map((i) => lines[i].minutes)), 0);
+}
+
+/** Permutaciones de índices; la primera siempre es el orden original. Se limita a 4 elementos (24 órdenes). */
 function orders(n: number): number[][] {
   const idx = Array.from({ length: n }, (_, i) => i);
   if (n > 4) return [idx];
@@ -82,7 +98,8 @@ export function computeSlots(input: SlotInput): Slot[] {
   const open = toMs(date, businessHours.open);
   const close = toMs(date, businessHours.close);
   const earliest = now + minNoticeHours * 60 * 60_000;
-  const total = lines.reduce((t, l) => t + l.minutes, 0) * MIN;
+  const total = totalMinutesOf(lines) * MIN;
+  const blocks = toBlocks(lines);
   const step = slotMinutes * MIN;
   const byId = new Map(employees.map((e) => [e.employeeId, e]));
 
@@ -98,7 +115,7 @@ export function computeSlots(input: SlotInput): Slot[] {
     });
   }
 
-  const orderList = orders(lines.length);
+  const orderList = orders(blocks.length); // se prueban distintos órdenes de BLOQUES
   const out: Slot[] = [];
 
   for (let t = open; t + total <= close; t += step) {
@@ -114,20 +131,27 @@ export function computeSlots(input: SlotInput): Slot[] {
         if (f.busy.some((x) => overlaps(iv, x)) || (taken.get(id) ?? []).some((x) => overlaps(iv, x))) return false;
         return maxDepth(f.booked, a, b) < maxConcurrent;
       };
-      const solve = (pos: number, at: number, prev: string | null): Assignment[] | null => {
-        if (pos === order.length) return [];
-        const li = order[pos];
-        const end = at + lines[li].minutes * MIN;
-        const cands = lines[li].eligible.filter((id) => byId.has(id) && free(id, at, end));
-        // Continuidad con el especialista anterior; luego reparto de carga (menos ocupado primero)
-        cands.sort((x, y) => (x === prev ? -1 : y === prev ? 1 : (fixed.get(x)!.load - fixed.get(y)!.load)));
-        for (const id of cands) {
-          taken.set(id, [...(taken.get(id) ?? []), { start: at, end }]);
-          const rest = solve(pos + 1, end, id);
-          if (rest) return [{ lineIndex: li, employeeId: id, start: at, end }, ...rest];
-          taken.set(id, (taken.get(id) ?? []).slice(0, -1));
-        }
-        return null;
+      // Un bloque: todas sus líneas empiezan a la vez (cada una con una especialista distinta); el siguiente empieza cuando termina el más largo
+      const solve = (bpos: number, at: number, prev: string | null): Assignment[] | null => {
+        if (bpos === order.length) return [];
+        const idxs = blocks[order[bpos]];
+        const blockEnd = at + Math.max(...idxs.map((i) => lines[i].minutes)) * MIN;
+        const assign = (k: number, last: string | null): Assignment[] | null => {
+          if (k === idxs.length) return solve(bpos + 1, blockEnd, last);
+          const li = idxs[k];
+          const end = at + lines[li].minutes * MIN;
+          const cands = lines[li].eligible.filter((id) => byId.has(id) && free(id, at, end));
+          // Continuidad con el especialista anterior; luego reparto de carga (menos ocupado primero)
+          cands.sort((x, y) => (x === last ? -1 : y === last ? 1 : (fixed.get(x)!.load - fixed.get(y)!.load)));
+          for (const id of cands) {
+            taken.set(id, [...(taken.get(id) ?? []), { start: at, end }]);
+            const rest = assign(k + 1, id);
+            if (rest) return [{ lineIndex: li, employeeId: id, start: at, end }, ...rest];
+            taken.set(id, (taken.get(id) ?? []).slice(0, -1));
+          }
+          return null;
+        };
+        return assign(0, prev);
       };
       found = solve(0, t, null);
       if (found) break;

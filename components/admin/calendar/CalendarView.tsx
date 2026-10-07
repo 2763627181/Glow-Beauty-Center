@@ -1,5 +1,6 @@
 "use client";
 
+import { serviceNames } from "@/lib/domain/serviceLines";
 import Link from "next/link";
 import { useState } from "react";
 import { ButtonLink } from "@/components/ui/Button";
@@ -33,9 +34,9 @@ function Chip({ a, label, onOpen }: { a: ApptRow; label?: string; onOpen: () => 
   const st = STATUS_META[a.status];
   return (
     <button className={`${s.chip} ${s[`st_${a.status}`] ?? ""}`} onClick={onOpen}
-      aria-label={`${a.client.first_name}, ${fmtTime(a.start_time)}, ${a.services.map((x) => x.name).join(", ")}, ${st.label}`}>
+      aria-label={`${a.client.first_name}, ${fmtTime(a.start_time)}, ${serviceNames(a.services).join(", ")}, ${st.label}`}>
       <strong>{label ?? fmtTime(a.start_time)} · {a.client.first_name}</strong>
-      {a.services.map((x) => x.name).join(", ")} · {st.mark} {st.label}
+      {serviceNames(a.services).join(", ")} · {st.mark} {st.label}
     </button>
   );
 }
@@ -50,7 +51,7 @@ function blocksFor(appts: ApptRow[], day: string, employeeId: string | null): Bl
     if (timed.length) {
       for (const l of timed) if ((l.employee_id ?? null) === employeeId && dayOf(l.start_time!) === day) out.push({ key: l.id, a, start: l.start_time!, end: l.end_time!, text: l.name });
     } else if ((a.employee_id ?? null) === employeeId && dayOf(a.start_time) === day) {
-      out.push({ key: a.id, a, start: a.start_time, end: a.end_time, text: a.services.map((x) => x.name).join(", ") });
+      out.push({ key: a.id, a, start: a.start_time, end: a.end_time, text: serviceNames(a.services).join(", ") });
     }
   }
   return out;

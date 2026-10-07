@@ -1,3 +1,4 @@
+import { groupLines } from "@/lib/domain/serviceLines";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { NoteForm } from "@/components/admin/appointments/NoteForm";
@@ -36,9 +37,9 @@ export default async function AppointmentPage({ params }: PageProps<"/admin/appo
           <p><strong>{fmtDate(a.start_time, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</strong><br />
             {fmtTime(a.start_time)} – {fmtTime(a.end_time)} · {a.employees.length ? a.employees.map((e) => e.name).join(" + ") : "Sin asignar"}</p>
           <ul style={{ display: "grid", gap: 4 }}>
-            {a.services.map((x) => (
-              <li key={x.id}>{x.name}{x.quantity > 1 && ` ×${x.quantity}`}{money$ && ` — ${money(x.final_price * x.quantity)}`}
-                <span className={u.sub}> · {x.employee_name ?? "Sin asignar"}{x.start_time ? ` · ${fmtTime(x.start_time)}–${fmtTime(x.end_time!)}` : ""}</span></li>
+            {groupLines(a.services).map((g) => (
+              <li key={g.key}>{g.name}{g.quantity > 1 && ` ×${g.quantity}`}{money$ && ` — ${money(g.price * g.quantity)}`}
+                <span className={u.sub}> · {g.employees.length ? g.employees.join(" + ") : "Sin asignar"}{g.lines[0].start_time ? ` · ${fmtTime(g.lines[0].start_time)}–${fmtTime(g.lines[0].end_time!)}` : ""}</span></li>
             ))}
           </ul>
           {a.discount > 0 && money$ && <p>Descuento: −{money(a.discount)}</p>}

@@ -2,6 +2,7 @@
 
 import { getAvailableSlots } from "@/lib/data/availability";
 import { friendlyError } from "@/lib/domain/errors";
+import { servicesFromAssignments } from "@/lib/domain/lineplan";
 import { queueCalendarSync } from "@/lib/integrations/google-calendar";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { bookingSchema } from "@/lib/validation/booking";
@@ -21,18 +22,16 @@ export async function createPublicBooking(raw: unknown): Promise<BookingResult> 
   if (b.website) return { ok: false, error: "Solicitud no válida" }; // bot
 
   // 1. El horario debe seguir disponible; el motor decide qué especialista atiende cada servicio.
-  const avail = await getAvailableSlots({ date: b.date, employeeId: b.employeeId, items: b.items });
+  const avail = await getAvailableSlots({ date: b.date, employeeId: b.employeeId, items: b.items, parallel: b.parallel });
   if (avail.error && !avail.slots.length) return { ok: false, error: avail.error, field: "start" };
   const slot = avail.slots.find((s) => new Date(s.start).getTime() === new Date(b.start).getTime());
   if (!slot) return { ok: false, error: "Ese horario acaba de ocuparse. Elige otra hora, por favor.", field: "start" };
 
-  // Los servicios se envían en el orden agendado, cada uno con su especialista.
-  const services = [...slot.assignments].sort((a, c) => a.start - c.start).map((a) => {
-    const it = b.items[a.lineIndex];
-    return { service_id: it.serviceId, variant_id: it.variantId ?? null, addon_ids: it.addonIds, employee_id: a.employeeId };
-  });
+  // Los servicios se envían en el orden agendado, cada uno con su(s) especialista(s): los que empiezan a la vez llevan
+  // «parallel» y las especialistas de un mismo servicio comparten «team» (el precio se reparte entre ellas en la base de datos).
+  const services = servicesFromAssignments(slot.assignments, avail.plan, b.items);
 
-  // 2. Crear (la restricción anti-solapes de la BD protege aun con reservas simultáneas).
+  // 2. Crear (si hay un tope de citas simultáneas configurado, la base de datos lo vuelve a comprobar al guardar).
   const db = createAdminClient();
   const { data, error } = await db.rpc("create_booking", {
     p: {

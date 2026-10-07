@@ -1,3 +1,4 @@
+import { serviceNames } from "@/lib/domain/serviceLines";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { NewForClient } from "@/components/admin/appointments/NewAppointment";
@@ -71,7 +72,7 @@ export default async function ClientPage({ params }: PageProps<"/admin/clients/[
                     return (
                       <tr key={a.id}>
                         <td data-label="Fecha"><Link className={u.link} href={`/admin/appointments/${a.id}`}>{fmtDate(a.start_time, { day: "numeric", month: "short", year: "numeric" })}</Link></td>
-                        <td data-label="Servicios">{a.services.map((x) => x.name).join(", ")}</td>
+                        <td data-label="Servicios">{serviceNames(a.services).join(", ")}</td>
                         <td data-label="Especialista">{a.employees.length ? a.employees.map((e) => e.name).join(" + ") : "—"}</td>
                         {money$ && <td data-label="Total" className={u.num}>{money(a.final_total ?? apptTotal(a))}</td>}
                         <td data-label="Estado"><StatusBadge status={a.status} /></td>

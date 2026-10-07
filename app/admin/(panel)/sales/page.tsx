@@ -1,3 +1,4 @@
+import { uniqueDescriptions } from "@/lib/domain/serviceLines";
 import Link from "next/link";
 import { Suspense } from "react";
 import { EmptyState, PageHead, PayBadge } from "@/components/admin/primitives";
@@ -28,7 +29,7 @@ export default async function SalesPage({ searchParams }: PageProps<"/admin/sale
   const label = new Map((methods ?? []).map((m) => [m.key, m.label]));
 
   let q = sb.from("sales")
-    .select("id,sale_number,completed_at,subtotal,discount,total,payment_status,voided_at,client:clients(first_name,last_name),employee:employees(full_name),sale_items(description),payments(method,status)", { count: "exact" })
+    .select("id,sale_number,completed_at,subtotal,discount,total,payment_status,voided_at,client:clients(first_name,last_name),employee:employees(full_name),sale_items(description,team_id),payments(method,status)", { count: "exact" })
     .order("completed_at", { ascending: false }).range((page - 1) * SIZE, page * SIZE - 1);
   if (["pendiente", "parcial", "pagado", "reembolsado"].includes(status)) q = q.eq("payment_status", status);
   if (from) q = q.gte("completed_at", drToISO(from, "00:00"));
@@ -73,7 +74,7 @@ export default async function SalesPage({ searchParams }: PageProps<"/admin/sale
                     <td data-label="Número"><Link className={u.link} href={`/admin/sales/${s.id}`}>{s.sale_number}</Link></td>
                     <td data-label="Fecha">{fmtDate(s.completed_at, { day: "numeric", month: "short" })}</td>
                     <td data-label="Cliente">{s.client ? `${s.client.first_name} ${s.client.last_name}` : "Mostrador"}</td>
-                    <td data-label="Servicios">{s.sale_items.map((i: any) => i.description).join(", ")}</td>
+                    <td data-label="Servicios">{uniqueDescriptions(s.sale_items).join(", ")}</td>
                     <td data-label="Especialista">{s.employee?.full_name ?? "—"}</td>
                     <td data-label="Subtotal" className={u.num}>{money(s.subtotal)}</td>
                     <td data-label="Desc." className={u.num}>{Number(s.discount) ? `−${money(s.discount)}` : "—"}</td>

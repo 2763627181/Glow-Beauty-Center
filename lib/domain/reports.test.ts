@@ -82,3 +82,19 @@ test("CSV neutraliza fórmulas pero respeta números y teléfonos", () => {
     '﻿"\'=HYPERLINK(""http://x"",""clic"")",\'+1+1,\'@SUM(A1),\'-cmd|\' /C calc\'!A0');
   assert.equal(toCSV([["+18296198257", "-125.50", 900, -5, "829-555-7001"]]), "﻿+18296198257,-125.50,900,-5,829-555-7001");
 });
+
+test("un servicio atendido por un equipo cuenta una sola vez (el dinero se suma completo)", () => {
+  const sale: SaleIn = {
+    id: "s1", sale_number: "V-1", completed_at: "2026-10-05T15:00:00Z", total: 1300, subtotal: 1300, discount: 0, tip: 0, payment_status: "pagado", client_id: null, client_name: "", employee_id: null, employee_name: "", payments: [],
+    items: [
+      { description: "Manicure", total: 300, service_id: "m", category_name: "Uñas", employee_id: "ana", employee_name: "Ana", commission_pct: null, team_id: "t1" },
+      { description: "Manicure", total: 300, service_id: "m", category_name: "Uñas", employee_id: "carla", employee_name: "Carla", commission_pct: null, team_id: "t1" },
+      { description: "Pedicure", total: 700, service_id: "p", category_name: "Uñas", employee_id: "ana", employee_name: "Ana", commission_pct: null },
+    ],
+  };
+  const s = summarize([sale], [], {});
+  const mani = s.byService.find((r) => r.label === "Manicure")!;
+  assert.equal(mani.value, 600); assert.equal(mani.count, 1); // un manicure, aunque lo hicieron dos
+  assert.equal(s.byCategory[0].count, 2); // categoría Uñas: manicure + pedicure
+  assert.equal(s.byEmployee.find((r) => r.label === "Ana")!.value, 1000); // cada especialista conserva su parte
+});

@@ -5,17 +5,20 @@ export const selectionSchema = z.object({
   serviceId: z.uuid(),
   variantId: z.uuid().nullish(),
   addonIds: z.array(z.uuid()).max(10).default([]),
+  employeeIds: z.array(z.uuid()).max(6).default([]),
 });
 
 export const availabilityQuerySchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   employeeId: z.union([z.literal("any"), z.uuid()]).default("any"),
+  parallel: z.boolean().default(false),
   items: z.array(selectionSchema).min(1).max(12),
 });
 
 export const bookingSchema = z.object({
   items: z.array(selectionSchema).min(1, "Selecciona al menos un servicio").max(12),
   employeeId: z.union([z.literal("any"), z.uuid()]).default("any"),
+  parallel: z.boolean().default(false),
   start: z.iso.datetime(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   promotionId: z.uuid().nullish(),

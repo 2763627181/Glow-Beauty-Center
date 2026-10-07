@@ -1,3 +1,4 @@
+import { serviceNames } from "@/lib/domain/serviceLines";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { BarChart, RankList } from "@/components/admin/charts";
@@ -70,7 +71,7 @@ export default async function Dashboard() {
             <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 10 }}>
               {requests.map((a) => (
                 <li key={a.id}><Link href={`/admin/appointments/${a.id}`} style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                  <span><strong>{a.client.first_name} {a.client.last_name}</strong><br /><span className={u.sub}>{a.services.map((x) => x.name).join(", ")}</span></span>
+                  <span><strong>{a.client.first_name} {a.client.last_name}</strong><br /><span className={u.sub}>{serviceNames(a.services).join(", ")}</span></span>
                   <span style={{ textAlign: "right" }}>{fmtDate(a.start_time, { day: "numeric", month: "short" })}<br />{fmtTime(a.start_time)}</span>
                 </Link></li>
               ))}

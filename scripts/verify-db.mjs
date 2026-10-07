@@ -347,6 +347,74 @@ try {
   check("web: un valor inválido equivale a sin límite", (await cnt(tc4)) === 3);
   await q("update business_settings set value = value - 'max_simultaneous' where key='booking'");
 
+  /* ───────── equipos de especialistas por servicio y servicios al mismo tiempo ───────── */
+  console.log("\n— Equipos y servicios al mismo tiempo —");
+  await asAdmin();
+  const lineRows = async (id) => (await q("select id, employee_id, price::float p, final_price::float fp, start_time, end_time, parallel, team_id, span_minutes from appointment_services where appointment_id=$1 order by position, id", [id])).rows;
+  const tA = iso(base + 800 * 36e5);
+  const A = (await q(...booking({ first_name: "Eq", last_name: "Uno", phone: "8295552001", source: "admin", start_time: tA, services: [
+    { service_id: man, employee_id: ana, team: "m1" }, { service_id: man, employee_id: carla, team: "m1", parallel: true }] }))).rows[0].r;
+  const la = await lineRows(A.id);
+  check("equipo: dos especialistas en el mismo servicio quedan con su propia línea, a la misma hora",
+    la.length === 2 && +la[0].start_time === +la[1].start_time && +la[0].end_time === +la[1].end_time && la[0].employee_id === ana && la[1].employee_id === carla);
+  check("equipo: el precio se reparte entre ellas y el total de la cita no cambia", la[0].p === 300 && la[1].p === 300 && la[0].fp + la[1].fp === 600 && Number(A.estimated_total) === 600, JSON.stringify(la.map((l) => l.p)));
+  check("equipo: comparten team_id y la segunda va «al mismo tiempo»", !!la[0].team_id && la[0].team_id === la[1].team_id && la[0].parallel === false && la[1].parallel === true);
+  check("equipo: la cita dura lo de un solo servicio (no se suman)", +new Date(A.end_time) - +new Date(tA) === la[0].span_minutes * 60e3);
+
+  const tB = iso(base + 810 * 36e5);
+  const B = (await q(...booking({ first_name: "Eq", last_name: "Dos", phone: "8295552002", source: "admin", start_time: tB, services: [
+    { service_id: man, employee_id: ana }, { service_id: gel, employee_id: carla, parallel: true }, { service_id: man, employee_id: ana }] }))).rows[0].r;
+  const lb = await lineRows(B.id);
+  check("al mismo tiempo: manicure con una y pintura con otra empiezan juntas, y el servicio siguiente va después del bloque más largo",
+    +lb[0].start_time === +lb[1].start_time && lb[1].parallel === true && +lb[2].start_time === Math.max(+lb[0].end_time, +lb[1].end_time) && lb[2].parallel === false);
+  check("al mismo tiempo: la cita termina cuando termina su última línea", +new Date(B.end_time) === +lb[2].end_time);
+  const dur = (l) => l.span_minutes * 60e3;
+  check("al mismo tiempo: sin equipos el precio no se reparte", lb[0].p === 600 && lb[1].p > 0);
+  void dur;
+
+  const tercera = (await q("insert into employees (full_name, active) values ('Tercera test', true) returning id")).rows[0].id;
+  const D = (await q(...booking({ first_name: "Eq", last_name: "Tres", phone: "8295552003", source: "admin", start_time: iso(base + 820 * 36e5), services: [
+    { service_id: gel, employee_id: ana, team: "g" }, { service_id: gel, employee_id: carla, team: "g", parallel: true }, { service_id: gel, employee_id: tercera, team: "g", parallel: true }] }))).rows[0].r;
+  const ld = await lineRows(D.id);
+  check("equipo de 3: el reparto suma exacto (la primera recibe el centavo que sobra)", ld.map((l) => l.p).join() === "233.34,233.33,233.33" && Number(D.estimated_total) === 700, ld.map((l) => l.p).join());
+
+  // Reprogramar conserva la estructura (misma hora de inicio de las líneas simultáneas)
+  await asUser(uManager);
+  const newB = iso(base + 830 * 36e5);
+  await q("select reschedule_appointment($1, $2, null)", [B.id, newB]);
+  const lb2 = await lineRows(B.id);
+  check("reprogramar: las líneas simultáneas siguen juntas y todo se corre al nuevo horario", +lb2[0].start_time === +new Date(newB) && +lb2[0].start_time === +lb2[1].start_time && lb2[1].parallel === true && +lb2[2].start_time === Math.max(+lb2[0].end_time, +lb2[1].end_time));
+
+  // Editar: sumar una tercera especialista al equipo existente y repartir el precio
+  const teamId = la[0].team_id;
+  await q("select update_appointment($1, $2::jsonb)", [A.id, JSON.stringify({ lines: [
+    { id: la[0].id, final_price: 200, team: teamId }, { id: la[1].id, final_price: 200, team: teamId },
+    { service_id: man, employee_id: tercera, parallel: true, team: teamId, final_price: 200 }] })]);
+  const la2 = await lineRows(A.id);
+  check("editar: se suma una especialista al equipo, a la misma hora y con el mismo team_id", la2.length === 3 && new Set(la2.map((l) => l.team_id)).size === 1 && new Set(la2.map((l) => +l.start_time)).size === 1 && la2[2].parallel === true);
+  check("editar: el precio repartido suma el precio del servicio", la2.reduce((s, l) => s + l.fp, 0) === 600);
+  await q("select update_appointment($1, $2::jsonb)", [A.id, JSON.stringify({ lines: [{ id: la[0].id, final_price: 600, team: null }, { id: la[1].id, final_price: 0, team: null }] })]);
+  const la3 = await lineRows(A.id);
+  check("editar: quitar a una especialista y deshacer el equipo deja las líneas sin team_id", la3.length === 2 && la3.every((l) => l.team_id === null));
+  await asAdmin();
+
+  // Completar: la venta conserva el equipo; una especialista que NO es la primera también puede completar
+  const G = (await q(...booking({ first_name: "Eq", last_name: "Cuatro", phone: "8295552004", source: "admin", status: "en_servicio", start_time: iso(base + 840 * 36e5), services: [
+    { service_id: man, employee_id: ana, team: "c" }, { service_id: man, employee_id: carla, team: "c", parallel: true }] }))).rows[0].r;
+  await asUser(uSpec); // Carla: es la segunda del equipo
+  const doneG = (await q("select complete_appointment($1) r", [G.id])).rows[0].r;
+  await asAdmin();
+  const si = (await q("select employee_id, total::float t, team_id from sale_items where sale_id=$1 order by employee_id", [doneG.sale_id])).rows;
+  check("completar: la especialista que no es la primera del equipo puede completar la cita", !!doneG.sale_id && !doneG.already_completed);
+  check("completar: la venta tiene una línea por especialista, con su parte y el mismo team_id", si.length === 2 && si.every((r) => r.t === 300) && si[0].team_id && si[0].team_id === si[1].team_id && new Set(si.map((r) => r.employee_id)).size === 2);
+
+  // La clienta ve un solo servicio por equipo en «Mi cita»
+  const H = (await q(...booking({ first_name: "Eq", last_name: "Cinco", phone: "8295552005", source: "admin", start_time: iso(base + 850 * 36e5), services: [
+    { service_id: man, employee_id: ana, team: "w" }, { service_id: man, employee_id: carla, team: "w", parallel: true }] }))).rows[0].r;
+  const lkH = (await q("select lookup_booking_public($1, '8295552005') r", [H.request_number])).rows[0].r;
+  check("mi cita: un equipo se muestra como un solo servicio con el precio completo", lkH.lines.length === 1 && lkH.lines[0].name === "Manicure" && Number(lkH.lines[0].price) === 600, JSON.stringify(lkH.lines));
+
+
   /* ───────── cumpleaños del personal ───────── */
   console.log("\n— Cumpleaños del personal —");
   await asAdmin();

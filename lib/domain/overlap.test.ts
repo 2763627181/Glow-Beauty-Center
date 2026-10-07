@@ -36,3 +36,15 @@ test("findOverlaps: ignora la propia cita (al reprogramar) y no repite una cita 
 test("findOverlaps: sin coincidencias devuelve una lista vacía", () => {
   assert.deepEqual(findOverlaps(lineSpans(T, [{ employeeId: "ana", minutes: 30 }]), [], names), []);
 });
+
+test("lineSpans: un servicio «al mismo tiempo» empieza junto con el anterior y el siguiente espera al más largo", () => {
+  const s = lineSpans(T, [
+    { employeeId: "ana", minutes: 45 }, { employeeId: "carla", minutes: 60, parallel: true }, { employeeId: "ana", minutes: 30 },
+  ]);
+  assert.deepEqual(s, [
+    { employeeId: "ana", start: min(0), end: min(45) },
+    { employeeId: "carla", start: min(0), end: min(60) },
+    { employeeId: "ana", start: min(60), end: min(90) },
+  ]);
+  assert.deepEqual(lineSpans(T, [{ employeeId: "ana", minutes: 30, parallel: true }]), [{ employeeId: "ana", start: min(0), end: min(30) }]); // la primera nunca es paralela
+});

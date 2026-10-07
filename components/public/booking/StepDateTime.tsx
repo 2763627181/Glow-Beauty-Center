@@ -31,7 +31,8 @@ export function StepDateTime({ form, set, maxDays }: StepProps & { maxDays: numb
   const days = useMemo(() => Array.from({ length: 14 }, (_, i) => addDays(today, i)), [today]);
   const [slots, setSlots] = useState<Slot[] | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
-  const itemsKey = JSON.stringify(cart.items);
+  // Servicios con las especialistas elegidas para cada uno: si cambian, se vuelven a buscar los horarios
+  const itemsKey = JSON.stringify([cart.items.map((i) => ({ ...i, employeeIds: form.staff[i.serviceId] ?? [] })), form.parallel]);
 
   useEffect(() => {
     if (!form.date) return;
@@ -40,13 +41,13 @@ export function StepDateTime({ form, set, maxDays }: StepProps & { maxDays: numb
     setSlots(null); setMsg(null);
     fetch("/api/availability", {
       method: "POST", headers: { "Content-Type": "application/json" }, signal: ctrl.signal,
-      body: JSON.stringify({ date: form.date, employeeId: form.employeeId, items: JSON.parse(itemsKey) }),
+      body: JSON.stringify({ date: form.date, employeeId: "any", items: JSON.parse(itemsKey)[0], parallel: JSON.parse(itemsKey)[1] }),
     })
       .then((r) => r.json())
       .then((d) => { setSlots(d.slots ?? []); setMsg(d.error ?? null); })
       .catch((e) => { if (e.name !== "AbortError") { setSlots([]); setMsg("No pudimos cargar los horarios. Revisa tu conexión."); } });
     return () => ctrl.abort();
-  }, [form.date, form.employeeId, itemsKey]);
+  }, [form.date, itemsKey]);
 
   return (
     <div style={{ display: "grid", gap: 20 }}>

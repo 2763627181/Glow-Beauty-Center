@@ -5,8 +5,8 @@ import { availabilityQuerySchema } from "@/lib/validation/booking";
 export async function POST(req: Request) {
   const parsed = availabilityQuerySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Solicitud no válida" }, { status: 400 });
-  const { date, employeeId, items } = parsed.data;
-  const res = await getAvailableSlots({ date, employeeId, items });
+  const { date, employeeId, items, parallel } = parsed.data;
+  const res = await getAvailableSlots({ date, employeeId, items, parallel });
   // No se expone qué especialista queda en cada hora ni la agenda interna.
   return NextResponse.json({
     slots: res.slots.map((s) => ({ time: s.time, start: s.start })),

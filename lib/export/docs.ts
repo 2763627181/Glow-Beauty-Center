@@ -2,6 +2,8 @@
  * Arma los documentos de exportación (citas, clientes, reportes y ventas) a partir de datos ya leídos.
  * Puro (sin base de datos ni Next): las rutas leen los datos y estas funciones deciden qué columnas, totales y secciones llevan.
  */
+import { uniqueDescriptions } from "../domain/serviceLines.ts";
+import { groupLines } from "../domain/serviceLines.ts";
 import type { ApptRow } from "../data/appointments.ts";
 import type { PayrollLine, PayrollRun } from "../data/payroll.ts";
 import { apptSubtotal, apptTotal } from "../data/appointment-math.ts";
@@ -46,7 +48,7 @@ export function appointmentsDoc(items: ApptRow[], ctx: Ctx, f: { range: string; 
       n: a.request_number, fecha: a.start_time, hora: `${fmtTime(a.start_time)} – ${fmtTime(a.end_time)}`,
       dur: duration(Math.max(0, Math.round((+new Date(a.end_time) - +new Date(a.start_time)) / 60000))),
       estado: STATUS_META[a.status].label, cliente: `${a.client.first_name} ${a.client.last_name}`.trim(), tel: a.client.phone, correo: a.client.email ?? "",
-      serv: a.services.map((s) => (s.quantity > 1 ? `${s.name} ×${s.quantity}` : s.name)).join(" + "),
+      serv: groupLines(a.services).map((g) => (g.quantity > 1 ? `${g.name} ×${g.quantity}` : g.name)).join(" + "),
       emp: a.employees.map((e) => e.name).join(" + "), origen: SOURCE_LABEL[a.source] ?? a.source,
       sub: apptSubtotal(a), desc: a.discount, prop: a.tip, total, pagado: a.paid, pend: closed ? 0 : Math.max(total - a.paid, 0),
       notas: a.notes ?? "", creada: a.created_at,
@@ -292,7 +294,7 @@ export function salesDoc(r: ReportRange, sales: SaleIn[], refs: SummaryOpts, ctx
     const staff = [...new Set(s.items.map((i) => i.employee_name || s.employee_name).filter(Boolean))];
     const open = s.payment_status === "pendiente" || s.payment_status === "parcial";
     return {
-      n: s.sale_number, fecha: s.completed_at, hora: s.completed_at, cliente: s.client_name, serv: s.items.map((i) => i.description).join(" + "), emp: staff.join(" + "),
+      n: s.sale_number, fecha: s.completed_at, hora: s.completed_at, cliente: s.client_name, serv: uniqueDescriptions(s.items).join(" + "), emp: staff.join(" + "),
       sub: s.subtotal, desc: s.discount, prop: s.tip, total: s.total, pagado: paid, pend: open ? Math.max(s.total - paid, 0) : 0,
       estado: PAY_LABEL[s.payment_status] ?? s.payment_status, metodos: [...methods].map(([k, v]) => `${k} ${moneyFixed(v)}`).join(" + "),
     };

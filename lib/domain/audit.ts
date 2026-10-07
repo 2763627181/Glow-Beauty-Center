@@ -20,7 +20,7 @@ const FIELD_LABEL: Record<string, string> = {
   featured: "destacado", image_url: "imagen", label: "etiqueta", value: "valor", quantity: "cantidad", voided_at: "anulada",
   commission: "comisión", tips: "propinas", base_salary: "sueldo base", bonus: "bonos", deductions: "descuentos", net: "neto a pagar",
   sales_total: "ventas", services_count: "servicios", paid_on: "fecha de pago", paid_method: "método de pago", paid_reference: "referencia",
-  period_start: "desde", period_end: "hasta", birth_month: "mes de cumpleaños", birth_day: "día de cumpleaños",
+  period_start: "desde", period_end: "hasta", parallel: "al mismo tiempo que el anterior", team_id: "equipo", birth_month: "mes de cumpleaños", birth_day: "día de cumpleaños",
 };
 const IGNORE = new Set(["updated_at", "created_at", "id", "phone_normalized"]);
 

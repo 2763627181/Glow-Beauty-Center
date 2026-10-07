@@ -3,7 +3,7 @@
 export type SaleIn = {
   id: string; sale_number: string; completed_at: string; total: number; subtotal: number; discount: number; tip: number;
   payment_status: string; client_id: string | null; client_name: string; employee_id: string | null; employee_name: string;
-  items: { description: string; total: number; service_id: string | null; category_name: string; employee_id: string | null; employee_name: string; commission_pct: number | null }[];
+  items: { description: string; total: number; service_id: string | null; category_name: string; employee_id: string | null; employee_name: string; commission_pct: number | null; team_id?: string | null }[];
   payments: { amount: number; method: string; status: string }[];
 };
 export type ApptIn = { status: string; start_time: string; created_at: string };
@@ -15,12 +15,16 @@ const dayKey = (iso: string) => new Date(iso).toLocaleDateString("en-CA", { time
 const hourOf = (iso: string) => Number(new Date(iso).toLocaleString("en-US", { timeZone: TZ, hour: "numeric", hour12: false })) % 24;
 const dowOf = (iso: string) => new Date(`${dayKey(iso)}T12:00:00-04:00`).getUTCDay();
 
-function group<T>(list: T[], key: (t: T) => string, val: (t: T) => number): Row[] {
+/** `once`: filas con la misma clave (por ejemplo, el equipo de un servicio) suman su valor pero cuentan una sola vez. */
+function group<T>(list: T[], key: (t: T) => string, val: (t: T) => number, once?: (t: T) => string | null | undefined): Row[] {
   const m = new Map<string, Row>();
+  const seen = new Set<string>();
   for (const x of list) {
     const k = key(x);
     const r = m.get(k) ?? { label: k, value: 0, count: 0 };
-    r.value += val(x); r.count = (r.count ?? 0) + 1;
+    r.value += val(x);
+    const o = once?.(x);
+    if (!o || !seen.has(`${k}|${o}`)) { r.count = (r.count ?? 0) + 1; if (o) seen.add(`${k}|${o}`); }
     m.set(k, r);
   }
   return [...m.values()].sort((a, b) => b.value - a.value);
@@ -65,8 +69,8 @@ export function summarize(sales: SaleIn[], appts: ApptIn[], opts: SummaryOpts = 
     collected: paid.reduce((t, p) => t + p.amount, 0),
     tips: valid.reduce((t, s) => t + s.tip, 0), discounts: valid.reduce((t, s) => t + s.discount, 0),
     clientsServed: new Set(valid.map((s) => s.client_id).filter(Boolean)).size,
-    byService: group(items, (i) => i.description, (i) => i.total),
-    byCategory: group(items, (i) => i.category_name || "Productos y otros", (i) => i.total),
+    byService: group(items, (i) => i.description, (i) => i.total, (i) => i.team_id),
+    byCategory: group(items, (i) => i.category_name || "Productos y otros", (i) => i.total, (i) => i.team_id),
     byEmployee: group(items, (i) => i.employee_name || "Sin asignar", (i) => i.total),
     commissions: [...commissionRows.values()].sort((a, b) => b.value - a.value),
     byMethod: group(paid, (p) => label(p.method), (p) => p.amount),

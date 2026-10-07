@@ -6,7 +6,7 @@ import { money } from "@/lib/format";
 import { useAdmin } from "../AdminContext";
 import { NumInput } from "../NumInput";
 import u from "../ui.module.css";
-import { newKey, type EditLine } from "./lines";
+import { addTeammate, newKey, type EditLine } from "./lines";
 import { StaffOptions } from "./StaffOptions";
 
 /** Editor de las líneas de una cita: especialista, precio final, cantidad, orden, altas (servicio / producto / concepto) y bajas. */
@@ -38,6 +38,22 @@ export function LinesEditor({ lines, onChange, showStaff = true, showOrder = tru
                   <strong>{l.name}</strong>
                   {!l.timed && <span className={u.hint}> · sin horario</span>}
                   {l.listPrice !== l.final_price && <div className={u.hint}>Precio de lista {money(l.listPrice)}</div>}
+                  {showStaff && l.timed && l.service_id && (() => {
+                    const timedBefore = lines.slice(0, i).filter((x) => x.timed).length;
+                    const joins = !!l.team && lines.findIndex((x) => x.team === l.team) < i; // no es la primera del equipo: empieza junto con ella
+                    return (
+                      <div style={{ display: "grid", gap: 4, marginTop: 4 }}>
+                        {l.team && <span className={`${u.badge} ${u.blue}`} style={{ justifySelf: "start" }}>En equipo</span>}
+                        {timedBefore > 0 && (
+                          <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: "0.82rem" }}>
+                            <input type="checkbox" checked={joins || !!l.parallel} disabled={joins} onChange={(e) => set(i, { parallel: e.target.checked })} aria-label={`${l.name}: al mismo tiempo que el anterior`} />
+                            Al mismo tiempo que el anterior
+                          </label>
+                        )}
+                        <Button type="button" size="sm" variant="soft" onClick={() => onChange(addTeammate(lines, i))} aria-label={`Sumar otra especialista a ${l.name}`} style={{ justifySelf: "start" }}>+ Otra especialista</Button>
+                      </div>
+                    );
+                  })()}
                 </td>
                 {showStaff && (
                   <td data-label="Especialista">

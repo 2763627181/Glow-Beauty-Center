@@ -1,5 +1,6 @@
 "use client";
 
+import { serviceNames } from "@/lib/domain/serviceLines";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { rescheduleAppointment, setAppointmentStatus } from "@/lib/actions/admin/appointments";
@@ -35,7 +36,7 @@ export const WA_KIND_LABEL: Record<WaKind, string> = { confirm: "Confirmación",
 export function waVars(a: ApptRow, businessName: string): Record<string, string> {
   return {
     nombre: a.client.first_name,
-    servicios: a.services.map((s) => s.name).join(", "),
+    servicios: serviceNames(a.services).join(", "),
     fecha: fmtDate(a.start_time, { weekday: "long", day: "numeric", month: "long" }),
     hora: fmtTime(a.start_time),
     total: money(apptTotal(a)),

@@ -34,7 +34,7 @@ export async function syncAppointmentToCalendar(appointmentId: string) {
   const db = createAdminClient();
   const { data } = await db
     .from("appointments")
-    .select("*, clients(first_name,last_name,phone), employees(full_name), appointment_services(name,start_time,end_time,position,employees(full_name))")
+    .select("*, clients(first_name,last_name,phone), employees(full_name), appointment_services(name,start_time,end_time,position,team_id,employees(full_name))")
     .eq("id", appointmentId).single();
   if (!data) return { skipped: true as const };
   const a = data as typeof data & ApptForEvent;

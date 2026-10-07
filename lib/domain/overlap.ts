@@ -1,16 +1,22 @@
 /** Aviso (no bloqueante) cuando una cita coincide con otras de la misma especialista. Funciones puras. */
 
-export type TimedLine = { employeeId: string | null; minutes: number };
+export type TimedLine = { employeeId: string | null; minutes: number; /** empieza junto con la línea anterior */ parallel?: boolean };
 export type LineSpan = { employeeId: string; start: number; end: number }; // ms
 
-/** Tramo de cada línea: se agendan en el orden recibido, una tras otra, desde `startMs` (igual que en la base de datos). */
+/**
+ * Tramo de cada línea, igual que lo calcula la base de datos: en el orden recibido, una tras otra desde `startMs`; una línea
+ * «al mismo tiempo» empieza junto con la anterior y el bloque dura lo que dure su línea más larga.
+ */
 export function lineSpans(startMs: number, lines: TimedLine[]): LineSpan[] {
   const out: LineSpan[] = [];
-  let t = startMs;
+  let bStart = startMs, bEnd = startMs, first = true;
   for (const l of lines) {
-    const minutes = Math.max(0, l.minutes);
-    if (l.employeeId && minutes > 0) out.push({ employeeId: l.employeeId, start: t, end: t + minutes * 60_000 });
-    t += minutes * 60_000;
+    const ms = Math.max(0, l.minutes) * 60_000;
+    let s: number;
+    if (first) { s = startMs; bStart = s; bEnd = s + ms; first = false; }
+    else if (l.parallel) { s = bStart; bEnd = Math.max(bEnd, s + ms); }
+    else { s = bEnd; bStart = s; bEnd = s + ms; }
+    if (l.employeeId && ms > 0) out.push({ employeeId: l.employeeId, start: s, end: s + ms });
   }
   return out;
 }

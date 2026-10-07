@@ -45,4 +45,8 @@ export type { BusinessSettings } from "@/lib/domain/settings";
 export type Catalog = { categories: Category[]; services: Service[] };
 
 /** Línea elegida por el cliente en el carrito / reserva. */
-export type SelectionItem = { serviceId: string; variantId?: string | null; addonIds: string[] };
+export type SelectionItem = {
+  serviceId: string; variantId?: string | null; addonIds: string[];
+  /** Especialistas elegidas para este servicio (varias = lo atienden a la vez; ninguna = cualquiera disponible). */
+  employeeIds?: string[];
+};

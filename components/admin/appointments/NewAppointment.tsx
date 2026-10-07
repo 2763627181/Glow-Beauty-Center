@@ -4,13 +4,15 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
 import { createManualAppointment, findClientByPhone } from "@/lib/actions/admin/appointments";
+import { totalMinutesOf } from "@/lib/domain/availability";
+import { expandTeams } from "@/lib/domain/teams";
 import { money } from "@/lib/format";
 import { useAdmin, useCan } from "../AdminContext";
 import { Alert } from "../primitives";
 import { Modal, useToast } from "../overlay";
 import { OverlapNotice, PastNotice, useOverlapHints } from "./OverlapNotice";
 import u from "../ui.module.css";
-import { StaffOptions } from "./StaffOptions";
+import { StaffPicker } from "./StaffPicker";
 import { fromLocalInput, toLocalInput } from "./useApptActions";
 
 export type Preset = { start?: string; employeeId?: string; phone?: string; firstName?: string; lastName?: string; email?: string };
@@ -32,7 +34,9 @@ export function NewAppointmentDialog({ mode, preset, onClose }: { mode: Mode; pr
     phone: preset?.phone ?? "", firstName: preset?.firstName ?? "", lastName: preset?.lastName ?? "", email: preset?.email ?? "",
   }));
   const [sel, setSel] = useState<string[]>([]);
-  const [empBy, setEmpBy] = useState<Record<string, string>>({});
+  // Por servicio: las especialistas que lo atienden (varias = a la vez) y si va «al mismo tiempo» que el servicio anterior
+  const [teamBy, setTeamBy] = useState<Record<string, string[]>>({});
+  const [parBy, setParBy] = useState<Record<string, boolean>>({});
   const [q, setQ] = useState("");
   const [known, setKnown] = useState<string | null>(null);
 
@@ -41,15 +45,16 @@ export function NewAppointmentDialog({ mode, preset, onClose }: { mode: Mode; pr
 
   const chosen = sel.map((k) => options.find((o) => o.key === k)!).filter(Boolean);
   const total = chosen.reduce((t, o) => t + o.price, 0);
-  const minutes = chosen.reduce((t, o) => t + o.durationMin, 0);
+  const picks = chosen.map((o, idx) => ({ minutes: o.durationMin, employeeIds: teamBy[o.key] ?? [], parallel: idx > 0 && !!parBy[o.key] }));
+  const minutes = totalMinutesOf(picks.map((p) => ({ minutes: p.minutes, parallel: p.parallel })));
   const whenISO = mode === "walkin" ? openedAt : f.when ? fromLocalInput(f.when) : null;
-  const hints = useOverlapHints(whenISO, chosen.map((o) => ({ employeeId: empBy[o.key] || null, minutes: o.durationMin })));
+  const hints = useOverlapHints(whenISO, expandTeams(picks).map((l) => ({ employeeId: l.employeeId, minutes: l.item.minutes, parallel: l.parallel })));
   const shown = useMemo(() => options.filter((o) => o.label.toLowerCase().includes(q.trim().toLowerCase())), [options, q]);
 
   function toggle(key: string, on: boolean) {
     setError(null);
     if (on) {
-      setEmpBy((m) => ({ ...m, [key]: f.employeeId })); // la especialista elegida arriba se aplica a cada servicio, lo tenga marcado o no
+      setTeamBy((m) => ({ ...m, [key]: f.employeeId ? [f.employeeId] : [] })); // la especialista elegida arriba se aplica a cada servicio, lo tenga marcado o no
       setSel((x) => [...x, key]);
     } else setSel((x) => x.filter((k) => k !== key));
   }
@@ -67,7 +72,7 @@ export function NewAppointmentDialog({ mode, preset, onClose }: { mode: Mode; pr
         firstName: f.firstName, lastName: f.lastName, phone: f.phone, email: f.email, notes: f.notes || undefined,
         source: f.source as "admin", start: mode === "walkin" ? new Date().toISOString() : fromLocalInput(f.when),
         status: f.status as "confirmado",
-        items: chosen.map((o) => ({ serviceId: o.serviceId, variantId: o.variantId, addonIds: [], employeeId: empBy[o.key] || null })),
+        items: chosen.map((o, idx) => ({ serviceId: o.serviceId, variantId: o.variantId, addonIds: [], employeeIds: teamBy[o.key] ?? [], parallel: idx > 0 && !!parBy[o.key] })),
       });
       if (!r.ok) return setError(r.error);
       toast(mode === "walkin" ? "Cliente registrado" : "Cita creada");
@@ -97,7 +102,7 @@ export function NewAppointmentDialog({ mode, preset, onClose }: { mode: Mode; pr
         <div className={u.field}><label htmlFor="n-emp">Especialista (para todos los servicios)</label>
           <select id="n-emp" value={f.employeeId} onChange={(e) => {
             const id = e.target.value; set({ employeeId: id });
-            if (id) setEmpBy((m) => Object.fromEntries(sel.map((k) => [k, id ?? m[k] ?? ""])));
+            if (id) setTeamBy((m) => Object.fromEntries(sel.map((k) => [k, id ? [id] : m[k] ?? []])));
           }}>
             <option value="">Sin asignar</option>
             {staff.filter((s) => s.active).map((s) => <option key={s.id} value={s.id}>{s.full_name}</option>)}
@@ -124,15 +129,19 @@ export function NewAppointmentDialog({ mode, preset, onClose }: { mode: Mode; pr
         </fieldset>
 
         {chosen.length > 0 && (
-          <div className={u.span2} style={{ display: "grid", gap: 8 }}>
-            <strong style={{ fontSize: "0.9rem" }}>Especialista por servicio (se agendan en este orden, uno tras otro)</strong>
-            {chosen.map((o) => (
-              <div key={o.key} style={{ display: "grid", gridTemplateColumns: "1fr 190px", gap: 8, alignItems: "center" }}>
-                <span>{o.label}</span>
-                <select aria-label={`Especialista para ${o.label}`} value={empBy[o.key] ?? ""} onChange={(e) => setEmpBy((m) => ({ ...m, [o.key]: e.target.value }))} style={{ minHeight: 40, borderRadius: 10, padding: "0 8px" }}>
-                  <option value="">Sin asignar</option>
-                  <StaffOptions serviceId={o.serviceId} staff={staff} links={links} />
-                </select>
+          <div className={u.span2} style={{ display: "grid", gap: 10 }}>
+            <strong style={{ fontSize: "0.9rem" }}>Especialistas por servicio</strong>
+            <span className={u.hint}>Marca una o varias por servicio (las marcadas lo atienden a la vez). Los servicios se hacen uno tras otro, salvo los que marques «al mismo tiempo».</span>
+            {chosen.map((o, idx) => (
+              <div key={o.key} style={{ display: "grid", gap: 8, padding: 12, border: "var(--border)", borderRadius: 12, background: "#fff" }}>
+                <strong>{o.label}</strong>
+                <StaffPicker label={o.label} serviceId={o.serviceId} staff={staff} links={links} value={teamBy[o.key] ?? []} onChange={(ids) => setTeamBy((m) => ({ ...m, [o.key]: ids }))} />
+                {idx > 0 && (
+                  <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <input type="checkbox" checked={!!parBy[o.key]} onChange={(e) => setParBy((m) => ({ ...m, [o.key]: e.target.checked }))} />
+                    Al mismo tiempo que el servicio anterior
+                  </label>
+                )}
               </div>
             ))}
           </div>

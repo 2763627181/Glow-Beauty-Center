@@ -1,3 +1,4 @@
+import { groupLines } from "./serviceLines.ts";
 import { fmtTime, money } from "../format.ts";
 
 /** Datos de una cita tal como los lee la sincronización con Google Calendar. */
@@ -9,7 +10,7 @@ export type ApptForEvent = {
   notes: string | null;
   clients: { first_name: string; last_name: string; phone: string };
   employees: { full_name: string } | null;
-  appointment_services: { name: string; start_time: string | null; end_time: string | null; position?: number | null; employees?: { full_name: string } | null }[];
+  appointment_services: { name: string; start_time: string | null; end_time: string | null; position?: number | null; team_id?: string | null; employees?: { full_name: string } | null }[];
 };
 
 export const STATUS_PREFIX: Record<string, string> = {
@@ -25,13 +26,15 @@ const colorOf = (status: string) => (status === "cancelado" || status === "no_as
 export function buildCalendarEvent(a: ApptForEvent) {
   const client = `${a.clients.first_name} ${a.clients.last_name}`.trim();
   const lines = [...a.appointment_services].sort((x, y) => (x.position ?? 0) - (y.position ?? 0));
-  const services = lines.map((s) => s.name);
+  // Un servicio atendido por un equipo cuenta como un solo servicio (con todas sus especialistas)
+  const groups = groupLines(lines.map((s) => ({ ...s, employee_name: s.employees?.full_name ?? null })));
+  const services = groups.map((g) => g.name);
   const staff = [...new Set(lines.map((s) => s.employees?.full_name).filter((n): n is string => !!n))];
   if (!staff.length && a.employees?.full_name) staff.push(a.employees.full_name);
   const prefix = STATUS_PREFIX[a.status] ?? a.status;
   // Con varios servicios y especialistas se detalla quién hace qué y a qué hora
-  const detail = lines.length > 1
-    ? ["", "Detalle:", ...lines.map((s) => `• ${s.name}${s.employees?.full_name ? ` — ${s.employees.full_name}` : ""}${s.start_time && s.end_time ? ` (${fmtTime(s.start_time)} – ${fmtTime(s.end_time)})` : ""}`)]
+  const detail = groups.length > 1 || groups.some((g) => g.employees.length > 1)
+    ? ["", "Detalle:", ...groups.map((g) => { const s = g.lines[0]; return `• ${g.name}${g.employees.length ? ` — ${g.employees.join(" + ")}` : ""}${s.start_time && s.end_time ? ` (${fmtTime(s.start_time)} – ${fmtTime(s.end_time)})` : ""}`; })]
     : [];
   return {
     summary: `${prefix} - ${client} - ${services.join(", ")}`,

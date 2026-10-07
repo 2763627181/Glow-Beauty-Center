@@ -8,6 +8,10 @@ export type ApptService = {
   id: string; service_id: string | null; variant_id: string | null; name: string; price: number; final_price: number;
   duration_minutes: number; span_minutes: number | null; quantity: number; addons: { name: string; price: number }[];
   employee_id: string | null; employee_name: string | null; start_time: string | null; end_time: string | null; position: number;
+  /** Empieza junto con la línea anterior. */
+  parallel: boolean;
+  /** Mismo valor en todas las líneas de un servicio atendido por varias especialistas. */
+  team_id: string | null;
 };
 export type ApptRow = {
   id: string; request_number: string; status: AppointmentStatus; source: AppointmentSource;
@@ -23,7 +27,7 @@ export type ApptRow = {
 };
 
 const SELECT = `*, client:clients(id,first_name,last_name,phone,email), employee:employees(id,full_name),
-  services:appointment_services(id,service_id,variant_id,name,price,final_price,duration_minutes,span_minutes,quantity,addons,employee_id,start_time,end_time,position,employee:employees(full_name)),
+  services:appointment_services(id,service_id,variant_id,name,price,final_price,duration_minutes,span_minutes,quantity,addons,employee_id,start_time,end_time,position,parallel,team_id,employee:employees(full_name)),
   payments(amount,status)`;
 
 /* eslint-disable @typescript-eslint/no-explicit-any */

@@ -148,12 +148,14 @@ try {
     await page.locator("#n-phone").fill("829-555-9105"); await page.locator("#n-fn").fill("E2E"); await page.locator("#n-ln").fill("Otra");
     await page.locator("#n-when").fill(`${DAY}T15:00`);
     await dialog().locator("label", { hasText: /^Tinte\s*RD\$/ }).locator("input").check();
-    const sel = page.getByLabel("Especialista para Tinte");
+    const grupo = page.getByRole("group", { name: "Especialistas para Tinte" });
     const hacen = (await q(`select e.full_name from employee_services es join employees e on e.id=es.employee_id join services s on s.id=es.service_id where s.name='Tinte' and e.active`)).map((r) => r.full_name).sort();
     assert(hacen.length > 0, "alguien debe tener marcado Tinte");
-    assert((await sel.locator("optgroup[label='Hacen este servicio'] option").allTextContents()).sort().join() === hacen.join(), "primero, quienes tienen marcado Tinte: " + hacen.join(", "));
-    assert((await sel.locator("optgroup[label='Otras especialistas'] option", { hasText: "E2E Ana" }).count()) === 1, "E2E Ana (que no hace Tinte) debe aparecer en «Otras especialistas»");
-    await sel.selectOption({ label: "E2E Ana" });
+    const nombres = (await grupo.locator("label").allTextContents()).map((t) => t.trim());
+    const pos = (n) => nombres.indexOf(n);
+    assert(hacen.every((n) => pos(n) >= 0 && pos(n) < pos("E2E Ana")), "primero salen quienes tienen marcado Tinte (" + hacen.join(", ") + ") y después las demás: " + nombres.join(" | "));
+    await expectVisible(grupo.getByText(/Otras especialistas \(no tienen este servicio marcado\)/), "separador de las demás especialistas");
+    await grupo.getByLabel("E2E Ana").check();
     await dialog().getByRole("button", { name: "Crear cita" }).click();
     await expectVisible(toast("Cita creada"), "toast", 10000);
     const [r] = await q(`select l.employee_id from appointment_services l join appointments a on a.id=l.appointment_id join clients c on c.id=a.client_id where c.phone_normalized='8295559105'`);

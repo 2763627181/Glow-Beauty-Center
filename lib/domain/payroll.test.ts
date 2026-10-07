@@ -95,3 +95,15 @@ test("títulos y rangos legibles", () => {
   assert.equal(periodLabel("2026-09-28", "2026-10-04"), "28 sep – 4 oct de 2026");
   assert.equal(periodLabel("2026-10-06", "2026-10-06"), "6 de octubre de 2026");
 });
+
+test("equipo: cada especialista cobra comisión sobre SU parte del servicio y la propina se reparte según lo que vendió cada una", () => {
+  // Manicure de RD$ 600 atendido por Ana y Carla (300 cada una) + pedicure de 700 solo de Ana; propina de 130
+  const team = { ...item("ana", 300, 40, "Manicure"), team_id: "t1" };
+  const r = computePayroll([sale(1, { tip: 130, items: [team, { ...item("carla", 300, null, "Manicure"), team_id: "t1" }, item("ana", 700, 40, "Pedicure")] })], opts);
+  assert.equal(r.get("ana")!.salesTotal, 1000);
+  assert.equal(r.get("ana")!.commission, 400); // (300 + 700) × 40 %
+  assert.equal(r.get("carla")!.commission, 150); // 300 × 50 % (comisión de la especialista)
+  assert.equal(r.get("ana")!.servicesCount, 2); assert.equal(r.get("carla")!.servicesCount, 1); // cada una cuenta los servicios en los que participó
+  assert.equal(r.get("ana")!.tips + r.get("carla")!.tips, 130);
+  assert.equal(r.get("carla")!.tips, 30); // 130 × 300 / 1300
+});

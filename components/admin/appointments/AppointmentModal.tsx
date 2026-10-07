@@ -1,5 +1,6 @@
 "use client";
 
+import { groupLines } from "@/lib/domain/serviceLines";
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { Button, ButtonAnchor, ButtonLink } from "@/components/ui/Button";
@@ -35,7 +36,7 @@ export function AppointmentModal({ appt, onClose }: { appt: ApptRow | null; onCl
   const reschedHints = useOverlapHints(
     resched && appt && when ? fromLocalInput(when) : null,
     (appt?.services ?? []).filter((s) => s.start_time && s.end_time)
-      .map((s) => ({ employeeId: emp || s.employee_id, minutes: (+new Date(s.end_time!) - +new Date(s.start_time!)) / 60000 })),
+      .map((s) => ({ employeeId: emp || s.employee_id, minutes: (+new Date(s.end_time!) - +new Date(s.start_time!)) / 60000, parallel: s.parallel })),
     appt?.id,
   );
 
@@ -63,10 +64,10 @@ export function AppointmentModal({ appt, onClose }: { appt: ApptRow | null; onCl
             <br />{appt.client.phone}{appt.client.email ? ` · ${appt.client.email}` : ""}
           </p>
           <ul style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 2 }}>
-            {appt.services.map((s) => (
-              <li key={s.id}>
-                {s.name} {s.quantity > 1 && `×${s.quantity}`} — {money(s.final_price * s.quantity)}
-                {(s.employee_name || s.start_time) && <span className={u.sub}> · {s.employee_name ?? "Sin asignar"}{s.start_time ? ` · ${fmtTime(s.start_time)}` : ""}</span>}
+            {groupLines(appt.services).map((g) => (
+              <li key={g.key}>
+                {g.name} {g.quantity > 1 && `×${g.quantity}`} — {money(g.price * g.quantity)}
+                {(g.employees.length > 0 || g.lines[0].start_time) && <span className={u.sub}> · {g.employees.length ? g.employees.join(" + ") : "Sin asignar"}{g.lines[0].start_time ? ` · ${fmtTime(g.lines[0].start_time)}` : ""}</span>}
               </li>
             ))}
           </ul>

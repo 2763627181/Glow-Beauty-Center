@@ -18,7 +18,7 @@ const appt = (o: { n: string; total: number; status: ApptRow["status"]; paid?: n
   id: o.n, request_number: o.n, status: o.status, source: "website", start_time: "2026-10-07T13:00:00Z", end_time: "2026-10-07T14:30:00Z", appointment_date: "2026-10-07",
   estimated_total: o.total, final_total: null, discount: 0, tip: 0, notes: o.notes ?? null, employee_id: null, client_id: "c1", created_at: "2026-10-05T12:00:00Z", promotion_id: null,
   client: { id: "c1", first_name: "María", last_name: "Pérez", phone: "829-555-0101", email: null }, employee: null, employees: [{ id: "e1", name: "Ana" }],
-  services: [{ id: "s1", service_id: null, variant_id: null, name: "Manicure", price: o.total, final_price: o.total, duration_minutes: 45, span_minutes: null, quantity: 1, addons: [], employee_id: "e1", employee_name: "Ana", start_time: null, end_time: null, position: 0 }],
+  services: [{ id: "s1", service_id: null, variant_id: null, name: "Manicure", price: o.total, final_price: o.total, duration_minutes: 45, span_minutes: null, quantity: 1, addons: [], employee_id: "e1", employee_name: "Ana", start_time: null, end_time: null, position: 0, parallel: false, team_id: null }],
   paid: o.paid ?? 0,
 }) as ApptRow;
 

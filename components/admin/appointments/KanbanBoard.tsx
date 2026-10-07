@@ -1,5 +1,6 @@
 "use client";
 
+import { serviceNames } from "@/lib/domain/serviceLines";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { DndContext, DragOverlay, MouseSensor, TouchSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
@@ -51,7 +52,7 @@ function Card({ a, overlay, own, onOpen, onPay, onEdit, onStep }: CardProps) {
         <span className={s.time}>{fmtTime(a.start_time)}</span>
         {movable && <button className={s.grip} {...listeners} {...attributes} aria-label="Arrastrar para cambiar de estado">⋮⋮</button>}
       </div>
-      <p className={s.meta}>{a.services.map((x) => x.name).join(" · ")}</p>
+      <p className={s.meta}>{serviceNames(a.services).join(" · ")}</p>
       <p className={s.meta}>{a.employees.length ? a.employees.map((e) => e.name).join(" + ") : "Sin asignar"}{allowed(role, "seeMoney") ? ` · ${money(apptTotal(a))}` : ""}</p>
       <div className={s.tags}>
         <span className={s.src}>{SOURCE_LABEL[a.source]}</span>
