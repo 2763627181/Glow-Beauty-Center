@@ -74,3 +74,17 @@ export async function until(fn, msg, timeout = 8000) {
     await new Promise((r) => setTimeout(r, 250));
   }
 }
+
+/** Revisa la pantalla actual con axe-core (WCAG 2.1 A/AA + buenas prácticas) y devuelve las violaciones («id ×nodos: ejemplo»). */
+export async function axeViolations(page) {
+  const { readFileSync } = await import("node:fs");
+  const { createRequire } = await import("node:module");
+  const AXE = readFileSync(createRequire(import.meta.url).resolve("axe-core/axe.min.js"), "utf8");
+  await page.waitForLoadState("networkidle").catch(() => {});
+  await page.waitForTimeout(500);
+  await page.evaluate(AXE);
+  return page.evaluate(async () => {
+    const res = await axe.run(document, { runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "best-practice"] } });
+    return res.violations.map((v) => `${v.id} ×${v.nodes.length}: ${v.nodes[0].target.join(" ")} — ${v.nodes[0].any[0]?.message ?? v.help}`);
+  });
+}

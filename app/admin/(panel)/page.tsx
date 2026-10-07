@@ -6,6 +6,8 @@ import { LiveRefresh } from "@/components/admin/LiveRefresh";
 import { EmptyState, PageHead, StatusBadge } from "@/components/admin/primitives";
 import u from "@/components/admin/ui.module.css";
 import { getSession, can } from "@/lib/auth";
+import { birthdayLabel, cumpleLabel, daysUntilBirthday } from "@/lib/domain/birthday";
+import { createClient } from "@/lib/supabase/server";
 import { countAppointments, listAppointments } from "@/lib/data/appointments";
 import { loadAppts, loadReportRefs, loadSales } from "@/lib/data/reports";
 import { dailySeries, monthlySeries, resolveRange, summarize } from "@/lib/domain/reports";
@@ -26,7 +28,7 @@ export default async function Dashboard() {
   sixMonths.setUTCMonth(sixMonths.getUTCMonth() - 5);
   const sixFrom = drToISO(sixMonths.toISOString().slice(0, 10), "00:00");
 
-  const [salesSix, apptsMonth, apptsToday, upcoming, requests, pendingCount, refs] = await Promise.all([
+  const [salesSix, apptsMonth, apptsToday, upcoming, requests, pendingCount, refs, { data: staffBd }] = await Promise.all([
     loadSales(sixFrom, month.toISO),
     loadAppts(month.fromISO, month.toISO),
     loadAppts(day.fromISO, day.toISO),
@@ -34,7 +36,11 @@ export default async function Dashboard() {
     listAppointments({ status: ["solicitud"], limit: 6 }),
     countAppointments(["solicitud", "contactando", "contactado"]),
     loadReportRefs(),
+    createClient().then((sb) => sb.from("employees").select("id,full_name,birth_month,birth_day").eq("active", true).not("birth_month", "is", null)),
   ]);
+  const birthdays = (staffBd ?? []).filter((e) => e.birth_month && e.birth_day)
+    .map((e) => ({ id: e.id, name: e.full_name, month: e.birth_month!, day: e.birth_day!, in: daysUntilBirthday(e.birth_month!, e.birth_day!, today) }))
+    .filter((b) => b.in <= 30).sort((a, b) => a.in - b.in).slice(0, 5);
   const salesMonth = salesSix.filter((x) => x.completed_at >= month.fromISO);
   const salesToday = salesSix.filter((x) => x.completed_at >= day.fromISO && x.completed_at < day.toISO);
   const m = summarize(salesMonth, apptsMonth, refs);
@@ -84,6 +90,19 @@ export default async function Dashboard() {
             </ul>
           )}
         </section>
+        {birthdays.length > 0 && (
+          <section className={u.card}>
+            <h2>🎂 Cumpleaños del equipo</h2>
+            <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 10 }}>
+              {birthdays.map((b) => (
+                <li key={b.id}><Link href={`/admin/staff/${b.id}`} style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                  <strong>{b.name}</strong>
+                  <span className={u.sub}>{cumpleLabel(b.in)} · {birthdayLabel(b.month, b.day)}</span>
+                </Link></li>
+              ))}
+            </ul>
+          </section>
+        )}
         <section className={u.card}><h2>Ventas últimos 7 días</h2><BarChart data={week} label="Ventas por día" fmtLabel={(l) => l.slice(8)} /></section>
         <section className={u.card}><h2>Ingresos mensuales</h2><BarChart data={monthly} label="Ingresos por mes" fmtLabel={(l) => MONTHS[Number(l.slice(5)) - 1]} /></section>
         <section className={u.card}><h2>Servicios más vendidos</h2><RankList rows={m.byService.slice(0, 6)} /></section>

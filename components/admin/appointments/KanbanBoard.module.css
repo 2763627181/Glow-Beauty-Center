@@ -17,5 +17,5 @@
 .grip { cursor: grab; color: var(--color-taupe); background: none; border: 0; font-size: 1.1rem; line-height: 1; padding: 0 4px; min-height: 28px; touch-action: none; }
 .emptyCol { text-align: center; font-size: 0.82rem; color: var(--color-text-secondary); padding: 18px 0; }
 .colMuted { background: #ece8e4; flex-basis: min(70vw, 240px); }
-.closedCard { opacity: 0.8; }
+.closedCard { background: #f3f0ee; } /* cerrada: fondo apagado; el texto mantiene su contraste */
 .closedCard .name { text-decoration: line-through; }

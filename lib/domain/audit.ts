@@ -5,7 +5,7 @@ export const ENTITY_LABEL: Record<string, string> = {
   appointments: "Citas", appointment_services: "Servicios de cita", payments: "Pagos", sales: "Ventas", services: "Servicios",
   clients: "Clientes", employees: "Especialistas", service_categories: "Categorías", service_variants: "Variantes", service_addons: "Complementos",
   promotions: "Promociones", gallery: "Galería", business_settings: "Configuración", profiles: "Usuarios", payment_methods: "Métodos de pago",
-  products: "Productos", schedule_blocks: "Bloqueos",
+  products: "Productos", schedule_blocks: "Bloqueos", payroll_runs: "Nómina", payroll_lines: "Volantes de nómina",
 };
 
 export const ACTION_LABEL: Record<string, string> = {
@@ -18,6 +18,9 @@ const FIELD_LABEL: Record<string, string> = {
   active: "activo", amount: "monto", method: "método", payment_status: "estado de pago", duration_minutes: "duración", commission_pct: "comisión %",
   role: "rol", full_name: "nombre", phone: "teléfono", email: "correo", title: "título", category: "categoría", display_order: "orden",
   featured: "destacado", image_url: "imagen", label: "etiqueta", value: "valor", quantity: "cantidad", voided_at: "anulada",
+  commission: "comisión", tips: "propinas", base_salary: "sueldo base", bonus: "bonos", deductions: "descuentos", net: "neto a pagar",
+  sales_total: "ventas", services_count: "servicios", paid_on: "fecha de pago", paid_method: "método de pago", paid_reference: "referencia",
+  period_start: "desde", period_end: "hasta", birth_month: "mes de cumpleaños", birth_day: "día de cumpleaños",
 };
 const IGNORE = new Set(["updated_at", "created_at", "id", "phone_normalized"]);
 

@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAccess } from "@/lib/auth";
+import { isValidBirthday } from "@/lib/domain/birthday";
+import { normalizeSettings } from "@/lib/domain/settings";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { refreshPublicSite } from "../refresh";
@@ -12,9 +14,11 @@ const employeeSchema = z.object({
   full_name: z.string().trim().min(2, "Nombre requerido").max(80),
   avatar_url: z.string().url().nullish(), phone: z.string().max(30).nullish(), email: z.union([z.literal(""), z.email("Correo no válido")]).nullish(),
   specialty: z.string().max(80).nullish(), bio: z.string().max(600).nullish(),
-  commission_pct: z.number().min(0).max(100).nullish(), active: z.boolean(), accepts_online_booking: z.boolean(),
+  commission_pct: z.number().min(0).max(100).nullish(), base_salary: z.number().min(0, "El sueldo base no puede ser negativo").max(10_000_000, "Sueldo base demasiado grande").nullish(), active: z.boolean(), accepts_online_booking: z.boolean(),
+  birth_month: z.number().int().min(1).max(12).nullish(), birth_day: z.number().int().min(1).max(31).nullish(),
   service_ids: z.array(z.uuid()),
-});
+}).refine((e) => (e.birth_month == null) === (e.birth_day == null), { message: "Elige el día y el mes del cumpleaños (o deja los dos vacíos).", path: ["birth_day"] })
+  .refine((e) => e.birth_month == null || e.birth_day == null || isValidBirthday(e.birth_month, e.birth_day), { message: "Esa fecha de cumpleaños no existe.", path: ["birth_day"] });
 export type EmployeeInput = z.input<typeof employeeSchema>;
 
 export async function saveEmployee(id: string | null, input: EmployeeInput): Promise<ActionResult<{ id: string }>> {
@@ -23,11 +27,12 @@ export async function saveEmployee(id: string | null, input: EmployeeInput): Pro
   if (!p.success) return { ok: false, error: p.error.issues[0].message };
   const { service_ids, ...row } = p.data;
   const sb = await createClient();
-  const payload = { ...row, email: row.email || null };
+  const payload = { ...row, email: row.email || null, birth_month: row.birth_month ?? null, birth_day: row.birth_day ?? null, base_salary: row.base_salary ?? 0 };
   const { data, error } = id
     ? await sb.from("employees").update(payload).eq("id", id).select("id").single()
     : await sb.from("employees").insert(payload).select("id").single();
   if (error) return { ok: false, error: "No se pudo guardar." };
+  if (!id) await seedDefaultSchedule(sb, data.id);
   // Diferencias en vez de borrar todo y reinsertar: si algo falla a medias, la especialista no pierde sus servicios.
   const { data: current } = await sb.from("employee_services").select("service_id").eq("employee_id", data.id);
   const have = new Set((current ?? []).map((r) => r.service_id));
@@ -47,17 +52,30 @@ export async function saveEmployee(id: string | null, input: EmployeeInput): Pro
   return { ok: true, id: data.id };
 }
 
+/**
+ * Una especialista nueva nace con el horario del negocio (Configuración → Horarios). Sin horario no aparecería en la
+ * reserva en línea ("No hay horarios disponibles"); se ajusta después en su ficha.
+ */
+async function seedDefaultSchedule(sb: Awaited<ReturnType<typeof createClient>>, employeeId: string) {
+  const { data } = await sb.from("business_settings").select("value").eq("key", "hours").maybeSingle();
+  const hours = normalizeSettings({ hours: data?.value }).hours;
+  const rows = Object.entries(hours).filter(([, h]) => h && h.close > h.open)
+    .map(([wd, h]) => ({ employee_id: employeeId, weekday: Number(wd), start_time: h!.open, end_time: h!.close }));
+  if (rows.length) await sb.from("employee_schedules").insert(rows);
+}
+
 /** Elimina un especialista sin historial; si ya atendió citas o ventas lo desactiva para conservar los reportes. */
 export async function deleteEmployee(id: string): Promise<ActionResult<{ archived: boolean }>> {
   await requireAccess("staff");
   const sb = await createClient();
-  const [{ count: a }, { count: b }, { count: c }, { count: d }] = await Promise.all([
+  const [{ count: a }, { count: b }, { count: c }, { count: d }, { count: e }] = await Promise.all([
     sb.from("appointments").select("id", { count: "exact", head: true }).eq("employee_id", id),
     sb.from("appointment_services").select("id", { count: "exact", head: true }).eq("employee_id", id),
     sb.from("sale_items").select("id", { count: "exact", head: true }).eq("employee_id", id),
     sb.from("sales").select("id", { count: "exact", head: true }).eq("employee_id", id),
+    sb.from("payroll_lines").select("id", { count: "exact", head: true }).eq("employee_id", id),
   ]);
-  if ((a ?? 0) + (b ?? 0) + (c ?? 0) + (d ?? 0) > 0) {
+  if ((a ?? 0) + (b ?? 0) + (c ?? 0) + (d ?? 0) + (e ?? 0) > 0) {
     const { error } = await sb.from("employees").update({ active: false, accepts_online_booking: false }).eq("id", id);
     if (error) return { ok: false, error: "No se pudo archivar." };
     refreshPublicSite(); revalidatePath("/admin/staff");

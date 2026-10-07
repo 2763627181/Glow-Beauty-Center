@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { computeSlots, type EmployeeDay, type SlotInput } from "./availability.ts";
+import { computeSlots, maxDepth, type EmployeeDay, type SlotInput } from "./availability.ts";
 
 const date = "2026-10-12"; // lunes
 const at = (hhmm: string) => new Date(`${date}T${hhmm}:00-04:00`).getTime();
@@ -96,4 +96,42 @@ test("COMBO largo: respeta almuerzo y cierre (8 h en total)", () => {
   const i = { ...base, employees: [ana, carla], lines: [{ minutes: 240, eligible: ["ana"] }, { minutes: 240, eligible: ["carla"] }] };
   // 09:00 → Ana 09:00–13:00 (justo antes del almuerzo), Carla 13:00–17:00 · 10:00 → Carla 10:00–14:00, Ana 14:00–18:00
   assert.deepEqual(computeSlots(i).map((s) => [s.time, s.assignments.map((a) => a.employeeId).join(">")]), [["09:00", "ana>carla"], ["10:00", "carla>ana"]]);
+});
+
+// ───────────── Citas simultáneas (varias a la misma hora con la misma especialista) ─────────────
+const iv = (a: string, b: string) => ({ start: at(a), end: at(b) });
+
+test("maxDepth: cuenta las citas que coinciden en un mismo instante (extremos semiabiertos)", () => {
+  assert.equal(maxDepth([], at("09:00"), at("10:00")), 0);
+  assert.equal(maxDepth([iv("09:00", "10:00")], at("09:00"), at("10:00")), 1);
+  assert.equal(maxDepth([iv("09:00", "10:00"), iv("09:30", "10:30")], at("09:00"), at("11:00")), 2);
+  assert.equal(maxDepth([iv("09:00", "10:00"), iv("10:00", "11:00")], at("09:00"), at("11:00")), 1); // seguidas, no coinciden
+  assert.equal(maxDepth([iv("09:00", "10:00")], at("10:00"), at("11:00")), 0); // termina justo cuando empieza el tramo
+});
+
+test("por defecto una especialista atiende una cita a la vez (comportamiento anterior)", () => {
+  const t = times({ ...base, employees: [{ ...ana, booked: [iv("10:00", "11:00")] }] });
+  assert.ok(!t.includes("10:00") && !t.includes("10:30") && t.includes("11:00") && t.includes("09:00"));
+});
+
+test("con tope 2, una hora con una cita sigue ofreciéndose; con dos ya no", () => {
+  const one = times({ ...base, maxConcurrent: 2, employees: [{ ...ana, booked: [iv("10:00", "11:00")] }] });
+  assert.ok(one.includes("10:00") && one.includes("10:30"));
+  const two = times({ ...base, maxConcurrent: 2, employees: [{ ...ana, booked: [iv("10:00", "11:00"), iv("10:00", "11:00")] }] });
+  assert.ok(!two.includes("10:00") && !two.includes("10:30") && two.includes("11:00"));
+});
+
+test("el tope mide coincidencias reales: dos citas seguidas no cuentan como dos a la vez", () => {
+  const t = times({ ...base, maxConcurrent: 2, employees: [{ ...ana, booked: [iv("10:00", "10:30"), iv("10:30", "11:00")] }] });
+  assert.ok(t.includes("10:00")); // 10:00–11:00 coincide con una sola cita en cada instante
+});
+
+test("los bloqueos y ausencias no se pueden compartir aunque el tope sea alto", () => {
+  const t = times({ ...base, maxConcurrent: 5, employees: [{ ...ana, busy: [iv("10:00", "11:00")] }] });
+  assert.ok(!t.includes("10:00") && !t.includes("10:30"));
+});
+
+test("con tope alto la carga sigue repartiéndose: prefiere a quien tiene menos citas", () => {
+  const i = { ...base, maxConcurrent: 3, employees: [{ ...ana, booked: [iv("15:00", "17:30")] }, carla], lines: [{ minutes: 30, eligible: ["ana", "carla"] }] };
+  assert.equal(computeSlots(i)[0].assignments[0].employeeId, "carla");
 });

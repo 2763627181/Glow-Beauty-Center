@@ -116,7 +116,7 @@ await step("Editar: no deja quitar el último servicio con horario ni guardar pr
   assert(await page.getByRole("button", { name: "Quitar Manicure" }).isDisabled(), "quitar el último servicio debe estar deshabilitado");
   await page.keyboard.press("Escape");
 });
-await step("Reprogramar mueve la cita y avisa si choca con otra", async () => {
+await step("Reprogramar mueve la cita; si coincide con otra de la misma especialista avisa pero la deja", async () => {
   await page.goto(BASE + "/admin/appointments?q=E2E");
   await page.getByRole("button", { name: "Abrir" }).first().click();
   await dialog().getByRole("button", { name: "Reprogramar" }).click();
@@ -125,14 +125,17 @@ await step("Reprogramar mueve la cita y avisa si choca con otra", async () => {
   await expectVisible(toast("Cita reprogramada"), "toast", 10000);
   const [a] = await q(`select to_char(start_time at time zone 'America/Santo_Domingo','HH24:MI') h from appointments where id=$1`, [apptId]);
   assert(a.h === "16:00", "hora " + a.h);
-  // Crear otra cita de Ana a las 10:00 y tratar de mover la primera encima
+  // Crear otra cita de Ana a las 10:00 y mover la primera encima: avisa, pero se permite (citas simultáneas)
   await q(`select create_booking(jsonb_build_object('first_name','Choque','last_name','E2E','phone','8295557101','status','confirmado','start_time',$1::text,'services',jsonb_build_array(jsonb_build_object('service_id',(select id from services where slug='manicure'),'employee_id',(select id from employees where full_name like 'Ana%')))))`, [new Date(`${DAY}T10:00:00-04:00`).toISOString()]);
   await page.goto(BASE + "/admin/appointments?q=E2E Cliente");
   await page.getByRole("button", { name: "Abrir" }).first().click();
   await dialog().getByRole("button", { name: "Reprogramar" }).click();
   await page.locator("#rs-when").fill(`${DAY}T10:15`);
+  await expectVisible(dialog().getByText("ya tiene otra cita a esa hora"), "aviso previo de coincidencia", 10000);
   await dialog().getByRole("button", { name: "Guardar nueva hora" }).click();
-  await expectVisible(toast("se cruza con otra cita"), "aviso de choque", 10000);
+  await expectVisible(toast("Cita reprogramada"), "toast", 10000);
+  const [ov] = await q(`select count(*)::int n from appointment_services l join appointments a on a.id=l.appointment_id where l.active and l.employee_id=(select id from employees where full_name like 'Ana%') and a.id<>$1 and l.start_time < (select end_time from appointments where id=$1) and l.end_time > (select start_time from appointments where id=$1)`, [apptId]);
+  assert(ov.n >= 1, "la cita debe quedar coincidiendo con la otra");
 });
 await step("Cancelar (con confirmación) libera el horario y se puede reabrir", async () => {
   await page.goto(BASE + "/admin/appointments?q=E2E Cliente");

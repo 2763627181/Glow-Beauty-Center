@@ -9,7 +9,7 @@ import { duration, money } from "@/lib/format";
 import { ConfirmDialog, useToast } from "../overlay";
 import u from "../ui.module.css";
 
-type S = { id: string; name: string; price: number; price_from: boolean; duration_minutes: number; active: boolean; featured: boolean; pending_review: boolean; variants: number };
+type S = { id: string; name: string; price: number; price_from: boolean; duration_minutes: number; active: boolean; featured: boolean; pending_review: boolean; variants: number; nobody?: boolean };
 
 export function ServiceRow({ s }: { s: S }) {
   const router = useRouter();
@@ -24,7 +24,8 @@ export function ServiceRow({ s }: { s: S }) {
     <tr>
       <td data-label="Servicio"><Link className={u.link} href={`/admin/services/${s.id}`}><strong>{s.name}</strong></Link>
         {s.pending_review && <span className={`${u.badge} ${u.gold}`} style={{ marginLeft: 8 }}>Por confirmar</span>}
-        {s.featured && <span className={`${u.badge} ${u.pink}`} style={{ marginLeft: 8 }}>Destacado</span>}</td>
+        {s.featured && <span className={`${u.badge} ${u.pink}`} style={{ marginLeft: 8 }}>Destacado</span>}
+        {s.nobody && s.active && !s.pending_review && <><br /><span className={`${u.badge} ${u.red}`} style={{ marginTop: 4 }} title="Ninguna especialista activa y visible en la web tiene este servicio asignado">Nadie lo realiza: no se puede reservar en línea</span></>}</td>
       <td data-label="Precio" className={u.num}>{s.price_from || s.variants > 0 ? "desde " : ""}{money(s.price)}</td>
       <td data-label="Duración">{duration(s.duration_minutes)}</td>
       <td data-label="Estado"><span className={`${u.badge} ${s.active ? u.green : u.gray}`}>{s.active ? "Activo" : "Inactivo"}</span></td>

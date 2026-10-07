@@ -12,9 +12,12 @@ import { AppointmentModal } from "../appointments/AppointmentModal";
 import { useNow } from "../useNow";
 import { NewAppointmentDialog, type Preset } from "../appointments/NewAppointment";
 import s from "./CalendarView.module.css";
+import { layoutLanes } from "./lanes";
 
 export type View = "day" | "week" | "month";
 const START_H = 8, END_H = 20, PX = 1.1; // px por minuto
+const MIN_BLOCK_H = 34; // alto mínimo de una cita en la agenda (px)
+const LANE_MIN_W = 150; // ancho mínimo por cita cuando varias coinciden a la misma hora (px)
 
 const dayOf = (iso: string) => new Date(iso).toLocaleDateString("en-CA", { timeZone: TZ });
 const minutesOfDay = (iso: string) => {
@@ -106,18 +109,30 @@ export function CalendarView({ view, date, today, appts, employees, query }: {
             {Array.from({ length: END_H - START_H + 1 }, (_, i) => <span key={i} className={s.hour} style={{ top: 40 + i * 60 * PX }}>{(START_H + i) % 12 || 12}{START_H + i >= 12 ? "p" : "a"}</span>)}
           </div>
           {cols.length === 0 && <p className={s.hint} style={{ padding: 20 }}>No hay especialistas activos.</p>}
-          {cols.map((c) => (
-            <div key={c.id ?? "none"} className={s.col} style={{ height: grid + 40, cursor: manage ? "copy" : "default" }} onClick={(e) => clickColumn(e, c.id)}>
+          {cols.map((c) => {
+            // Citas a la misma hora con la misma especialista: se dibujan una al lado de la otra
+            const laned = layoutLanes(blocksFor(appts, date, c.id).map((b) => {
+              const start = +new Date(b.start);
+              return { ...b, start, end: Math.max(+new Date(b.end), start + (MIN_BLOCK_H / PX) * 60_000), iso: b.start, isoEnd: b.end };
+            }));
+            const widest = laned.reduce((n, b) => Math.max(n, b.lanes), 1);
+            return (
+            <div key={c.id ?? "none"} className={s.col} style={{ height: grid + 40, cursor: manage ? "copy" : "default", flexBasis: Math.max(180, widest * LANE_MIN_W) }} onClick={(e) => clickColumn(e, c.id)}>
               <div className={s.colHead}>{c.name}</div>
               {Array.from({ length: END_H - START_H }, (_, i) => <div key={i} className={s.line} style={{ top: 40 + i * 60 * PX }} />)}
               {nowMin !== null && nowMin >= START_H * 60 && nowMin <= END_H * 60 && <div className={s.now} style={{ top: 40 + (nowMin - START_H * 60) * PX }} aria-hidden />}
-              {blocksFor(appts, date, c.id).map((b) => {
-                const top = Math.max(0, (minutesOfDay(b.start) - START_H * 60) * PX);
-                const h = Math.max(((+new Date(b.end) - +new Date(b.start)) / 60000) * PX, 34);
-                return <div key={b.key} className={s.block} style={{ top: 40 + top, height: h }}><Chip a={b.a} label={fmtTime(b.start)} onOpen={() => setOpen(b.a.id)} /></div>;
+              {laned.map((b) => {
+                const top = Math.max(0, (minutesOfDay(b.iso) - START_H * 60) * PX);
+                const h = Math.max(((+new Date(b.isoEnd) - b.start) / 60000) * PX, MIN_BLOCK_H);
+                return (
+                  <div key={b.key} className={s.block} style={{ top: 40 + top, height: h, left: `calc(${(b.lane * 100) / b.lanes}% + 3px)`, right: `calc(${100 - ((b.lane + 1) * 100) / b.lanes}% + 3px)` }}>
+                    <Chip a={b.a} label={fmtTime(b.iso)} onOpen={() => setOpen(b.a.id)} />
+                  </div>
+                );
               })}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

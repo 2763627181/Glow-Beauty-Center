@@ -1,7 +1,7 @@
 /** Traduce los códigos de error que lanzan las funciones SQL a mensajes claros para la persona que usa el sistema. */
 export const ERROR_MESSAGES: Record<string, string> = {
-  slot_taken: "Ese horario se cruza con otra cita del especialista.",
-  appt_lines_no_overlap: "Ese horario se cruza con otra cita del especialista.",
+  slot_taken: "Ese horario acaba de ocuparse. Elige otra hora.",
+  appt_lines_no_overlap: "Ese horario acaba de ocuparse. Elige otra hora.",
   past_date: "No se puede agendar en el pasado.",
   service_unavailable: "Uno de los servicios ya no está disponible.",
   variant_required: "Elige una opción (por ejemplo el largo) en uno de los servicios.",
@@ -31,6 +31,8 @@ export const ERROR_MESSAGES: Record<string, string> = {
   booking_not_cancellable: "Esta cita ya no se puede cancelar desde aquí (está en curso, completada o cancelada).",
   booking_too_late: "Ya no es posible cancelar en línea por la política de cancelación. Escríbenos por WhatsApp.",
   client_not_found: "El cliente no existe.",
+  payroll_paid: "Esa nómina ya está pagada. Reábrela si necesitas corregirla.",
+  payroll_period_locked: "El período de una nómina no se puede cambiar; elimínala y crea otra.",
   payment_not_refundable: "Ese pago no se puede reembolsar.",
 };
 

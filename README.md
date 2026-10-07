@@ -80,6 +80,7 @@ Los permisos se **imponen en la base de datos** (RLS y funciones SQL), no solo e
 | Iniciar y completar un servicio | ✔ | ✔ | ✔ | solo los suyos |
 | Clientes | ✔ | ✔ | crear y editar | solo lectura de los suyos, **sin montos** |
 | Cobrar, ventas rápidas, ver ventas y cobros | ✔ | ✔ | ✔ | – |
+| **Nómina de pago** (crear, ajustar, pagar, volantes) | ✔ | ✔ | – | – |
 | Anular ventas, reembolsar, eliminar registros, fusionar clientes | ✔ | ✔ | – | – |
 
 ## Qué se edita desde el panel
@@ -87,13 +88,14 @@ Los permisos se **imponen en la base de datos** (RLS y funciones SQL), no solo e
 | Módulo | Qué puedes crear / editar / eliminar |
 |---|---|
 | **Servicios** | servicios (precio, duración, tiempos antes/después, comisión, foto, “desde”, destacado, consulta previa, especialistas que lo hacen), **variantes** (largo del cabello…), **complementos**, categorías (con foto), productos de venta; duplicar, ordenar, activar/ocultar. Los que ya tienen historial se archivan para no perder reportes |
-| **Especialistas** | datos, foto, biografía, comisión, servicios, horario semanal con almuerzo, ausencias/vacaciones, orden, cuenta de acceso |
-| **Solicitudes, Tablero y Agenda** | todo el flujo de la cita (9 estados), arrastrar y soltar, reprogramar, varios servicios con especialistas distintos, notas, WhatsApp, citas manuales y clientes sin cita |
+| **Especialistas** | datos, foto, biografía, comisión, sueldo base, **cumpleaños** (día y mes; ese día llega una notificación), servicios (con «Marcar todos» por categoría), horario semanal con almuerzo, ausencias/vacaciones, orden, cuenta de acceso. Una especialista nueva nace con el horario del negocio y el panel avisa si le falta horario o servicios |
+| **Nómina** | pago por período (quincena, mes, semana o fechas propias): ventas, **comisión**, propinas, sueldo base, bonos y descuentos de cada especialista; borrador editable → pagada (queda congelada); volante de pago y nómina completa en Excel, PDF y CSV. Ver más abajo |
+| **Solicitudes, Tablero y Agenda** | todo el flujo de la cita (9 estados), arrastrar y soltar, reprogramar, varios servicios con especialistas distintos, notas, WhatsApp, citas manuales y clientes sin cita. **Se pueden agendar varias citas a la misma hora con la misma especialista** (el panel avisa, pero deja guardar; la agenda las muestra una al lado de la otra) |
 | **Clientes** | alta, edición, notas privadas, historial, desactivar, **fusionar duplicados**, exportar a Excel, PDF o CSV |
 | **Ventas y Cobros** | cobro con pagos divididos, propina y descuento, venta rápida de mostrador, abonos, anular, reembolsar, recibo imprimible |
 | **Promociones** | combos con precio especial, fechas e imagen; el descuento se aplica solo al reservar |
 | **Galería** | subir fotos (se reducen automáticamente), título, categoría, portada, orden, ocultar, eliminar |
-| **Configuración** | datos del negocio y redes · **textos e imágenes de toda la web** (portada, secciones, pasos, “Nosotros”, páginas de Servicios/Reservar/Contacto, SEO) · horarios, feriados y bloqueos · reglas de reserva y políticas · métodos de pago · plantillas de WhatsApp · integraciones |
+| **Configuración** | datos del negocio y redes · **textos e imágenes de toda la web** (portada, secciones, pasos, “Nosotros”, páginas de Servicios/Reservar/Contacto, SEO) · horarios, feriados y bloqueos · reglas de reserva (incluye **cuántas citas al mismo tiempo** acepta la web por especialista) y políticas · métodos de pago · plantillas de WhatsApp · integraciones |
 | **Usuarios y permisos** | crear cuentas, cambiar rol, restablecer contraseña, desactivar, eliminar |
 | **Exportaciones** | botón **Exportar** en *Solicitudes y citas*, *Clientes* y *Reportes* (gerente o super admin): **Excel** (.xlsx con formato, filtros y totales), **PDF** con la marca del negocio, o **CSV** simple. Ver más abajo |
 | **Auditoría** | quién hizo qué y cuándo (filtros por módulo y usuario) |
@@ -116,11 +118,23 @@ Cada exportación sale del mismo documento, así que los tres formatos siempre c
 - **CSV:** una tabla limpia para importar en otros programas (el reporte completo trae todas las secciones). Va con BOM para que Excel respete las tildes y protegido contra fórmulas maliciosas.
 - Los reportes y listados leen **todas** las filas del período (antes Supabase los cortaba en 1,000).
 
+## Nómina de pago
+
+*Nómina* (menú, solo gerente y super admin) → **+ Nueva nómina**: eliges el período (quincena anterior, mes anterior, semana anterior o fechas propias) y se crea un **borrador** con un volante por especialista activa.
+
+- **Comisión** = Σ (importe de cada servicio o producto vendido × % de comisión). Se usa el % de la propia venta y, si no tiene, el de la especialista (la misma regla del reporte de comisiones). Cuentan las ventas cobradas por completo (se puede incluir también las pendientes); las reembolsadas **nunca** cuentan.
+- **Propinas:** se reparten entre quienes atendieron cada venta, en proporción a lo que vendió cada una (se pueden dejar fuera).
+- **Neto a pagar** = sueldo base + comisión + propinas + bonos − descuentos. El sueldo base se copia de la ficha de la especialista; bonos, descuentos y una nota se escriben en cada volante (adelantos, faltas, tardanzas…).
+- **Recalcular** vuelve a leer las ventas (conserva lo que escribiste). **Marcar como pagada** pide fecha, forma de pago y referencia y **congela** la nómina: ya no cambia aunque después se anule una venta (la base de datos lo impide). **Reabrir** permite corregirla a propósito (queda en Auditoría).
+- No se le paga dos veces el mismo día a la misma especialista: una nómina cuyo período se cruza con otra donde ya está se rechaza con un mensaje claro. Quincenas seguidas (1–15 y 16–30) no chocan.
+- **Exportar:** nómina completa (hoja de pago por especialista + detalle de las ventas que originan cada comisión) y **volante de pago** de cada una en PDF o Excel, con la marca del negocio.
+
 ## Cómo funcionan las reservas
 
 - La clienta elige servicios (puede combinar cabello + uñas + spa), especialista o “sin preferencia”, día y hora. Solo ve horarios **realmente libres**: se calculan con el horario de cada especialista, almuerzos, ausencias, feriados, bloqueos, citas existentes, duración y tiempos de preparación.
-- Un combo entre varias especialistas se agenda **en secuencia** (cada servicio con su especialista, sin solaparse).
-- La base de datos impide por restricción que una especialista tenga dos citas a la vez, incluso con reservas simultáneas. Hay honeypot anti-bots y un máximo de solicitudes abiertas por teléfono.
+- Un combo entre varias especialistas se agenda **en secuencia** (cada servicio con su especialista, uno tras otro).
+- **Citas al mismo tiempo:** recepción y gerencia pueden agendar todas las que quieran a la misma hora con la misma especialista (el panel solo avisa). En la **web**, cada especialista acepta hasta *N* solicitudes simultáneas (*Configuración → Reservas → «Citas al mismo tiempo por especialista»*, de 1 a 10, por defecto 2; 1 = una a la vez). El tope lo comprueba la base de datos al guardar (con candado por especialista), así que ni dos clientas a la vez pueden pasarse. Hay honeypot anti-bots y un máximo de solicitudes abiertas por teléfono.
+- **«No hay horarios disponibles»:** la web solo ofrece horas de especialistas **activas, visibles en reservas, con horario semanal guardado y con ese servicio asignado**. Si falta algo de eso, el panel lo avisa (etiquetas «Sin horario», «Sin servicios» en *Especialistas* y «Nadie lo realiza» en *Servicios*) y la web explica qué servicio no tiene quien lo haga en vez de mostrar un calendario vacío.
 - Los teléfonos dominicanos (809/829/849) se normalizan para no duplicar clientes.
 - Al completar una cita se genera la **venta** en una sola operación, idempotente (no se duplica aunque se repita el clic).
 - Autoservicio: con el número de solicitud + teléfono la clienta consulta y cancela su cita en *Mi cita* (`/booking/manage`), hasta el límite de horas que defines en *Configuración → Reservas*.
@@ -152,7 +166,7 @@ Cada cita se crea en el calendario del salón y se actualiza al cambiar de estad
 5. En Supabase → *Authentication → URL Configuration*, pon el dominio en **Site URL**.
 6. Elige para Vercel una región cercana al proyecto de Supabase (y a República Dominicana, p. ej. `iad1`).
 
-### Avisos internos (“cita en menos de 1 hora”, “pago pendiente”)
+### Avisos internos (“cita en menos de 1 hora”, “pago pendiente”, “hoy cumple años …”)
 
 Los genera `pg_cron` dentro de Supabase cada 5 minutos (la migración 08 lo programa). Si tu proyecto no tiene `pg_cron`, define `CRON_SECRET` y programa una llamada cada 5 min a `GET /api/cron/reminders` con la cabecera `Authorization: Bearer <CRON_SECRET>` (en Vercel Pro, con *Cron Jobs*).
 
@@ -169,6 +183,7 @@ Los genera `pg_cron` dentro de Supabase cada 5 minutos (la migración 08 lo prog
 - **Respaldos:** los planes de pago de Supabase incluyen copias diarias. En el plan gratuito exporta periódicamente: *Clientes*, *Citas* y *Reportes* desde el panel (Excel o CSV), y/o `pg_dump "$DATABASE_URL" -Fc -f respaldo.dump`.
 - **Fotos del salón:** la portada de la web, la página “Nosotros”, la imagen que sale al compartir el enlace por WhatsApp/redes y las primeras fotos de la galería son las **fotos reales del local** de la carpeta `Img del negocio/`. Se publicaron con `node --env-file=.env.local scripts/upload-business-photos.mjs` (se puede repetir sin duplicar; si cambias los archivos de la carpeta, vuelve a correrlo). También puedes cambiarlas cuando quieras desde el panel (*Configuración → Sitio web* y *Galería*).
 - **Fotos de ejemplo:** los servicios, las categorías y el resto de la galería traen fotos de stock para que la web luzca completa desde el primer día. Reemplázalas por las tuyas desde *Servicios*, *Servicios → Categorías* y *Galería* (puedes ocultar o eliminar las de ejemplo una por una).
+- **Conexión a la base de datos desde tu computadora:** si `npm run verify:db` o los scripts fallan con `ENOTFOUND`/`ETIMEDOUT`, tu red no tiene IPv6 o bloquea el puerto 5432. Usa en `DATABASE_URL` el *Session pooler* de Supabase (Connect → Session pooler: host `aws-0-<región>.pooler.supabase.com`, usuario `postgres.<ref>`). La web publicada no usa `DATABASE_URL`.
 - **Especialistas de ejemplo:** *Ana (demo)* y *Carla (demo)* existen solo para que la reserva tenga disponibilidad. Crea a tus especialistas reales (servicios + horario) y luego elimina las demo desde *Especialistas*. `supabase/seed/99_remove_demo.sql` borra de golpe todos los datos demo (citas, ventas y clientes incluidos); si ya hay citas reales asignadas a las demo, reasígnalas o cancélalas antes.
 - **Imágenes huérfanas** (fotos reemplazadas o quitadas): `npm run cleanup:storage` las lista; `npm run cleanup:storage -- --delete` borra las de más de un día.
 - Para cambiar la contraseña de alguien: *Usuarios y permisos → Contraseña*. Cada persona cambia la suya en *Mi cuenta*.
@@ -177,13 +192,15 @@ Los genera `pg_cron` dentro de Supabase cada 5 minutos (la migración 08 lo prog
 
 | Comando | Qué hace |
 |---|---|
-| `npm test` | pruebas unitarias (motor de disponibilidad, reportes, líneas de cita, búsqueda, exportaciones a Excel/PDF/CSV, evento de Calendar, validaciones) |
+| `npm test` | pruebas unitarias (motor de disponibilidad con citas simultáneas, agenda en carriles, cumpleaños, nómina, reportes, líneas de cita, búsqueda, exportaciones a Excel/PDF/CSV, evento de Calendar, validaciones) |
 | `npm run typecheck` · `npm run lint` | TypeScript y ESLint |
-| `npm run verify:db` | 113 verificaciones de la base de datos (permisos por rol, ventas, pagos, anti-solapes, autoservicio…) dentro de una transacción que se revierte: no deja datos |
+| `npm run verify:db` | 157 verificaciones de la base de datos (permisos por rol, ventas, pagos, citas simultáneas y tope de la web, cumpleaños, horarios por defecto, nómina, autoservicio…) dentro de una transacción que se revierte: no deja datos; sirve también con la base real |
 | `npm run e2e` | pruebas de extremo a extremo con un navegador real (Playwright): web pública y reserva, todo el panel, permisos por rol, escritura tecla por tecla, tiempo real, subida de fotos y descarga de las exportaciones |
 | `npm run e2e:gcal` | sincronización con Google Calendar contra un servidor simulado |
 | `npm run e2e:a11y` | escaneo de accesibilidad (axe) de la web y del panel |
 
+> Las suites nuevas `simultaneas` y `nomina` (`node e2e/run-all.mjs simultaneas nomina`) son **seguras con la base real**: solo crean y borran filas propias («E2E …», ventas de enero de 2020) y limpian hasta su rastro en Auditoría. Las demás sí modifican datos:
+>
 > ⚠ Las pruebas **E2E escriben y borran datos** en la base de `.env.local` y cambian (y restauran) algunos ajustes. Úsalas con un proyecto de Supabase de pruebas, no durante la operación real. Necesitan los datos demo y, la primera vez, `npx playwright install chromium`. Con la web corriendo (`npm run build && npm start`) ejecuta `npm run e2e`; crea y borra solas los usuarios `tmp-*@glow.test`.
 
 ## Estructura

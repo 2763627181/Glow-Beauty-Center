@@ -15,6 +15,7 @@ import { ConfirmDialog, Modal, useToast } from "../overlay";
 import { StatusBadge } from "../primitives";
 import u from "../ui.module.css";
 import { EditAppointmentModal } from "./EditAppointmentModal";
+import { OverlapNotice, useOverlapHints } from "./OverlapNotice";
 import { PaymentModal } from "./PaymentModal";
 import { canMove, clientWaLink, CLOSED, fromLocalInput, NEXT_STEP, toLocalInput, useApptActions, WA_KIND_LABEL, type WaKind } from "./useApptActions";
 
@@ -31,6 +32,12 @@ export function AppointmentModal({ appt, onClose }: { appt: ApptRow | null; onCl
   const [emp, setEmp] = useState("");
   const [kind, setKind] = useState<WaKind>("confirm");
   const [busy, start] = useTransition();
+  const reschedHints = useOverlapHints(
+    resched && appt && when ? fromLocalInput(when) : null,
+    (appt?.services ?? []).filter((s) => s.start_time && s.end_time)
+      .map((s) => ({ employeeId: emp || s.employee_id, minutes: (+new Date(s.end_time!) - +new Date(s.start_time!)) / 60000 })),
+    appt?.id,
+  );
 
   if (!appt) return null;
   const manage = allowed(role, "manageAppointments");
@@ -114,6 +121,7 @@ export function AppointmentModal({ appt, onClose }: { appt: ApptRow | null; onCl
                   {staff.filter((s) => s.active).map((s) => <option key={s.id} value={s.id}>{s.full_name}</option>)}
                 </select>
               </div>
+              {reschedHints.length > 0 && <div className={u.span2} style={{ display: "grid", gap: 6 }}><OverlapNotice hints={reschedHints} /></div>}
               <div className={u.span2}><Button size="sm" disabled={act.pending || !when} onClick={() => act.reschedule(appt.id, fromLocalInput(when), emp || null)}>Guardar nueva hora</Button></div>
             </div>
           )}

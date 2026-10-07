@@ -31,14 +31,14 @@ await book("Ana", PHONES[0], "10:00", man, ana);
 await book("Carla", PHONES[1], "14:00", lav, carla, lavVar);
 await book("Borrar", PHONES[2], "11:30", man, ana);
 
-const FULL = ["Dashboard", "Agenda", "Solicitudes y citas", "Tablero", "Clientes", "Servicios", "Especialistas", "Ventas", "Cobros", "Reportes", "Promociones", "Galería", "Configuración", "Auditoría", "Usuarios y permisos"];
+const FULL = ["Dashboard", "Agenda", "Solicitudes y citas", "Tablero", "Clientes", "Servicios", "Especialistas", "Ventas", "Cobros", "Nómina", "Reportes", "Promociones", "Galería", "Configuración", "Auditoría", "Usuarios y permisos"];
 const EXPECT = {
   super_admin: FULL,
   manager: FULL.filter((x) => x !== "Usuarios y permisos"),
   receptionist: ["Agenda", "Solicitudes y citas", "Tablero", "Clientes", "Ventas", "Cobros"],
   specialist: ["Agenda", "Solicitudes y citas", "Tablero", "Clientes"],
 };
-const PATH_OF = { Dashboard: "/admin", Agenda: "/admin/calendar", "Solicitudes y citas": "/admin/appointments", Tablero: "/admin/appointments/board", Clientes: "/admin/clients", Servicios: "/admin/services", Especialistas: "/admin/staff", Ventas: "/admin/sales", Cobros: "/admin/payments", Reportes: "/admin/reports", Promociones: "/admin/promotions", Galería: "/admin/gallery", Configuración: "/admin/settings", Auditoría: "/admin/audit", "Usuarios y permisos": "/admin/users" };
+const PATH_OF = { Dashboard: "/admin", Agenda: "/admin/calendar", "Solicitudes y citas": "/admin/appointments", Tablero: "/admin/appointments/board", Clientes: "/admin/clients", Servicios: "/admin/services", Especialistas: "/admin/staff", Ventas: "/admin/sales", Cobros: "/admin/payments", Nómina: "/admin/payroll", Reportes: "/admin/reports", Promociones: "/admin/promotions", Galería: "/admin/gallery", Configuración: "/admin/settings", Auditoría: "/admin/audit", "Usuarios y permisos": "/admin/users" };
 
 async function withRole(email, fn, opts) {
   const { browser, page, errors } = await launch(opts);

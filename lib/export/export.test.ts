@@ -5,7 +5,8 @@ import type { ApptRow } from "../data/appointments.ts";
 import { fetchAll } from "../data/paginate.ts";
 import type { SaleIn } from "../domain/reports.ts";
 import { buildCsv } from "./csv.ts";
-import { appointmentsDoc, clientsDoc, reportDoc, salesDoc, type ClientExportRow } from "./docs.ts";
+import type { PayrollLine, PayrollRun } from "../data/payroll.ts";
+import { appointmentsDoc, clientsDoc, paySlipDoc, payrollDoc, reportDoc, salesDoc, type ClientExportRow } from "./docs.ts";
 import { imageSize } from "./image.ts";
 import { csvValue, excelDate, pdfSafe, pdfText, sheetName, sumColumn, type ExportDoc } from "./model.ts";
 import { buildPdf } from "./pdf.ts";
@@ -167,4 +168,54 @@ test("el documento vacío también se exporta (Excel y PDF) con el mensaje de «
   await wb.xlsx.load((await buildXlsx(doc)) as unknown as ArrayBuffer);
   assert.equal(wb.getWorksheet("Citas")!.getCell("A5").value, "No hay citas con estos filtros.");
   assert.ok(buildPdf(doc).length > 1000);
+});
+
+/* ───────────── Nómina ───────────── */
+const run: PayrollRun = { id: "r1", run_number: "NOM-0007", title: "Quincena 1–15 de octubre 2026", period_start: "2026-10-01", period_end: "2026-10-15", status: "pagada", only_paid: true, include_tips: true, notes: "Pagada por transferencia", paid_on: "2026-10-16", paid_method: "Transferencia", paid_reference: "TR-889", paid_reason: undefined, created_at: "2026-10-16T12:00:00Z" } as unknown as PayrollRun;
+const pline = (o: Partial<PayrollLine> & { employee_name: string }): PayrollLine => ({
+  id: o.employee_name, run_id: "r1", employee_id: o.employee_name, services_count: 0, sales_total: 0, commission: 0, tips: 0, base_salary: 0, bonus: 0, deductions: 0, net: 0, notes: null, detail: [], ...o,
+});
+const plines: PayrollLine[] = [
+  pline({ employee_name: "Santa Antigua", services_count: 2, sales_total: 4600, commission: 1840, tips: 300, base_salary: 5000, bonus: 500, deductions: 1000.25, net: 6639.75, notes: "Adelanto del día 5",
+    detail: [{ date: "2026-10-03T15:00:00Z", sale: "GBC-202610-00001", description: "Tinte", total: 4000, pct: 40, commission: 1600 }, { date: "2026-10-04T15:00:00Z", sale: "GBC-202610-00002", description: "Lavado y Secado", total: 600, pct: 40, commission: 240 }] }),
+  pline({ employee_name: "Esther Antigua Cierra", services_count: 1, sales_total: 3500, commission: 1400, net: 1400, detail: [{ date: "2026-10-05T15:00:00Z", sale: "GBC-202610-00003", description: "Keratina Nano", total: 3500, pct: 40, commission: 1400 }] }),
+];
+
+test("nómina: Excel con una fila por especialista, totales correctos y el detalle de ventas", async () => {
+  const doc = payrollDoc(run, plines, ctx);
+  assert.equal(doc.fileBase, "glow-nomina-2026-10-01_2026-10-15");
+  assert.equal(doc.kpis[0].value, 8039.75); // total a pagar = suma de netos
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load((await buildXlsx(doc)) as unknown as ArrayBuffer);
+  assert.deepEqual(wb.worksheets.map((w) => w.name), ["Resumen", "Nómina", "Detalle de ventas"]);
+  const ws = wb.getWorksheet("Nómina")!;
+  assert.equal(ws.getCell("A5").value, "Santa Antigua");
+  assert.equal(ws.getCell("I5").value, 6639.75);
+  assert.equal(wb.getWorksheet("Detalle de ventas")!.rowCount >= 5 + 3, true);
+  assert.equal(sumColumn(doc.sections[0], "neto"), 8039.75);
+  assert.equal(sumColumn(doc.sections[1], "com"), 3240);
+});
+
+test("nómina: CSV con las especialistas, PDF válido y el signo menos no se pierde", () => {
+  const doc = payrollDoc(run, plines, ctx);
+  const csv = buildCsv(doc);
+  assert.match(csv, /Santa Antigua/); assert.match(csv, /Esther Antigua Cierra/); assert.doesNotMatch(csv, /Tinte/); // CSV: solo la primera tabla
+  assert.ok(buildPdf(doc).length > 3000);
+  assert.ok(!doc.sections[0].subtitle!.includes("−"), "el PDF no admite el signo − (se perdería)");
+  assert.equal(pdfText("money", -1000.25), "RD$ -1,000.25");
+});
+
+test("volante de pago: conceptos que suman el neto y las ventas de la especialista", async () => {
+  const doc = paySlipDoc(run, plines[0], ctx);
+  assert.equal(doc.title, "Volante de pago");
+  assert.match(doc.fileBase, /^glow-volante-santa-antigua-2026-10-01_2026-10-15$/);
+  assert.equal(sumColumn(doc.sections[0], "monto"), 6639.75); // 5000 + 1840 + 300 + 500 − 1000.25
+  assert.equal(doc.sections[1].rows.length, 2);
+  assert.match(doc.sections[0].note ?? "", /Adelanto del día 5/);
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load((await buildXlsx(doc)) as unknown as ArrayBuffer);
+  assert.deepEqual(wb.worksheets.map((w) => w.name), ["Resumen", "Conceptos", "Servicios"]);
+  assert.ok(buildPdf(doc).length > 3000);
+  const empty = paySlipDoc(run, plines[1], ctx);
+  assert.equal(sumColumn(empty.sections[0], "monto"), 1400);
 });

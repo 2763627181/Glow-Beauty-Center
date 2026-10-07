@@ -10,7 +10,7 @@
 import { spawnSync } from "node:child_process";
 
 const node = process.execPath;
-const SUITES = ["public", "admin-a", "admin-b", "admin-c", "roles", "typing", "focus-audit", "buttons-audit", "exports", "realtime", "upload"];
+const SUITES = ["public", "admin-a", "admin-b", "admin-c", "roles", "typing", "focus-audit", "buttons-audit", "exports", "realtime", "upload", "simultaneas", "nomina"];
 const only = process.argv.slice(2);
 const run = (args) => spawnSync(node, ["--env-file=.env.local", ...args], { stdio: "inherit" });
 

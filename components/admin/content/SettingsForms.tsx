@@ -96,6 +96,9 @@ export function BookingForm({ booking, policies }: { booking: BusinessSettings["
       <div className={u.field}><label htmlFor="bk-slot">Intervalo entre horarios (min)</label>
         <select id="bk-slot" value={b.slot_minutes} onChange={(e) => setB({ ...b, slot_minutes: Number(e.target.value) })}>{[10, 15, 20, 30, 60].map((x) => <option key={x} value={x}>{x}</option>)}</select></div>
       <div className={u.field}><label htmlFor="bk-ch">El cliente puede cancelar en línea hasta (horas antes)</label><NumInput id="bk-ch" integer min={0} value={b.cancel_hours} emptyValue={0} onValue={(v) => setB({ ...b, cancel_hours: v ?? 0 })} /><span className={u.hint}>Pasado ese límite, debe escribirte por WhatsApp.</span></div>
+      <div className={u.field}><label htmlFor="bk-sim">Citas al mismo tiempo por especialista (reserva en línea)</label>
+        <NumInput id="bk-sim" integer min={1} max={10} value={b.max_simultaneous} emptyValue={1} onValue={(v) => setB({ ...b, max_simultaneous: v ?? 1 })} />
+        <span className={u.hint}>1 = una cita a la vez. Con 2 o más, la web sigue ofreciendo esa hora hasta llenar ese número. Desde el panel (recepción) siempre puedes agendar todas las que quieras.</span></div>
       <div className={`${u.field} ${u.span2}`}><label htmlFor="bk-can">Política de cancelación (se muestra al cliente)</label><textarea id="bk-can" value={b.cancellation_policy} onChange={(e) => setB({ ...b, cancellation_policy: e.target.value })} /></div>
       <div className={`${u.field} ${u.span2}`}><label htmlFor="bk-pol">Otras políticas</label><textarea id="bk-pol" value={p} onChange={(e) => setP(e.target.value)} /></div>
       <div className={`${u.field} ${u.span2}`}><label>Moneda, idioma y zona horaria</label><p className={u.sub}>Peso dominicano (RD$) · Español (es-DO) · America/Santo_Domingo</p></div>

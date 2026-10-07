@@ -11,7 +11,7 @@ import { subscribeRealtime } from "@/lib/supabase/browser";
 import s from "./AdminShell.module.css";
 import { useToast } from "./overlay";
 
-type N = { id: string; title: string; body: string | null; appointment_id: string | null; sale_id?: string | null; read_at: string | null; created_at: string };
+type N = { id: string; title: string; body: string | null; appointment_id: string | null; sale_id?: string | null; employee_id?: string | null; read_at: string | null; created_at: string };
 
 export function NotificationBell({ initial }: { initial: N[] }) {
   const [list, setList] = useState<N[]>(initial);
@@ -52,7 +52,7 @@ export function NotificationBell({ initial }: { initial: N[] }) {
             <div className={s.panelHead}>Notificaciones {unread > 0 && <button className={s.mini} onClick={readAll}>Marcar todo leído</button>}</div>
             {list.length === 0 && <p className={s.notif}>Sin notificaciones.</p>}
             {list.map((n) => (
-              <Link key={n.id} href={n.appointment_id ? `/admin/appointments/${n.appointment_id}` : n.sale_id ? `/admin/sales/${n.sale_id}` : "/admin/appointments"}
+              <Link key={n.id} href={n.appointment_id ? `/admin/appointments/${n.appointment_id}` : n.sale_id ? `/admin/sales/${n.sale_id}` : n.employee_id ? `/admin/staff/${n.employee_id}` : "/admin/appointments"}
                 className={`${s.notif} ${n.read_at ? "" : s.unread}`} onClick={() => { read(n.id); setOpen(false); }}>
                 <strong>{n.title}</strong>
                 <small>{n.body} · {fmtDateTime(n.created_at)}</small>

@@ -11,15 +11,15 @@ const ms = (iso: string) => new Date(iso).getTime();
 const hhmm = (t?: string | null) => (t ? t.slice(0, 5) : null);
 
 /** Duración de cada línea (con preparación y tiempo posterior) calculada desde la BD; nunca se confía en el cliente. */
-async function resolveLines(items: SelectionItem[]): Promise<{ minutes: number; serviceId: string }[] | null> {
+async function resolveLines(items: SelectionItem[]): Promise<{ minutes: number; serviceId: string; name: string }[] | null> {
   const db = createAdminClient();
   const ids = [...new Set(items.map((i) => i.serviceId))];
   const [{ data: svcs }, { data: vars }, { data: adds }] = await Promise.all([
-    db.from("services").select("id,duration_minutes,buffer_before_minutes,buffer_after_minutes,active,pending_review").in("id", ids),
+    db.from("services").select("id,name,duration_minutes,buffer_before_minutes,buffer_after_minutes,active,pending_review").in("id", ids),
     db.from("service_variants").select("id,service_id,duration_minutes,active").in("service_id", ids),
     db.from("service_addons").select("id,service_id,duration_minutes,active").in("service_id", ids),
   ]);
-  const out: { minutes: number; serviceId: string }[] = [];
+  const out: { minutes: number; serviceId: string; name: string }[] = [];
   for (const it of items) {
     const s = svcs?.find((x) => x.id === it.serviceId);
     if (!s || !s.active || s.pending_review) return null;
@@ -32,7 +32,7 @@ async function resolveLines(items: SelectionItem[]): Promise<{ minutes: number; 
       if (!ad) return null;
       d += ad.duration_minutes;
     }
-    out.push({ minutes: d + s.buffer_before_minutes + s.buffer_after_minutes, serviceId: s.id });
+    out.push({ minutes: d + s.buffer_before_minutes + s.buffer_after_minutes, serviceId: s.id, name: s.name });
   }
   return out;
 }
@@ -66,8 +66,14 @@ export async function getAvailableSlots(q: SlotQuery): Promise<SlotResult> {
     if (q.employeeId !== "any") eligible = eligible.filter((id) => id === q.employeeId);
     return { minutes: l.minutes, eligible };
   });
-  if (lineReqs.some((l) => l.eligible.length === 0)) {
-    return { slots: [], totalMinutes, items: q.items, error: q.employeeId === "any" ? undefined : "Esa especialista no realiza todos los servicios elegidos." };
+  const nobody = lineReqs.findIndex((l) => l.eligible.length === 0);
+  if (nobody >= 0) {
+    return {
+      slots: [], totalMinutes, items: q.items,
+      error: q.employeeId === "any"
+        ? `Por ahora no hay una especialista disponible para «${resolved[nobody].name}». Escríbenos por WhatsApp y te ayudamos a agendar.`
+        : "Esa especialista no realiza todos los servicios elegidos.",
+    };
   }
   const pool = [...new Set(lineReqs.flatMap((l) => l.eligible))];
 
@@ -92,8 +98,8 @@ export async function getAvailableSlots(q: SlotQuery): Promise<SlotResult> {
       busy: [
         ...(blocks ?? []).filter((b) => b.employee_id === id).map(iv),
         ...(off ?? []).filter((b) => b.employee_id === id).map(iv),
-        ...(busyLines ?? []).filter((b) => b.employee_id === id).map(iv),
       ],
+      booked: (busyLines ?? []).filter((b) => b.employee_id === id).map(iv),
     };
   });
 
@@ -101,6 +107,7 @@ export async function getAvailableSlots(q: SlotQuery): Promise<SlotResult> {
     date: q.date, businessHours: settings.hours[String(weekday)],
     businessBlocks: (blocks ?? []).filter((b) => b.employee_id == null).map(iv),
     employees, lines: lineReqs, slotMinutes: settings.booking.slot_minutes, now, minNoticeHours: settings.booking.min_notice_hours,
+    maxConcurrent: settings.booking.max_simultaneous,
   });
   return { slots, totalMinutes, items: q.items };
 }

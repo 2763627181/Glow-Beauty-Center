@@ -57,6 +57,7 @@
 .alert { padding: 10px 14px; border-radius: 12px; font-size: 0.9rem; }
 .alertErr { background: var(--color-danger-bg); color: var(--color-danger); }
 .alertOk { background: var(--color-success-bg); color: var(--color-success); }
+.alertWarn { background: #f6ecd0; color: #5c4710; }
 .link { color: var(--color-primary-dark); text-decoration: underline; }
 
 .tabs { display: flex; gap: 6px; overflow-x: auto; margin-bottom: 20px; padding-bottom: 4px; border-bottom: var(--border); scrollbar-width: none; }

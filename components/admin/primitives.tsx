@@ -34,6 +34,6 @@ export function Skeleton({ h = 20, w = "100%" }: { h?: number; w?: number | stri
   return <div className={s.skeleton} style={{ height: h, width: w }} aria-hidden />;
 }
 
-export function Alert({ kind = "err", children }: { kind?: "err" | "ok"; children: ReactNode }) {
-  return <p role={kind === "err" ? "alert" : "status"} className={`${s.alert} ${kind === "err" ? s.alertErr : s.alertOk}`}>{children}</p>;
+export function Alert({ kind = "err", children }: { kind?: "err" | "ok" | "warn"; children: ReactNode }) {
+  return <p role={kind === "err" ? "alert" : "status"} className={`${s.alert} ${kind === "err" ? s.alertErr : kind === "warn" ? s.alertWarn : s.alertOk}`}>{children}</p>;
 }

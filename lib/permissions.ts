@@ -14,6 +14,7 @@ export const PERMISSIONS = {
   clients: ["super_admin", "manager", "receptionist", "specialist"], // el especialista solo lee los suyos
   services: ["super_admin", "manager"],
   staff: ["super_admin", "manager"],
+  payroll: ["super_admin", "manager"],
   sales: ["super_admin", "manager", "receptionist"],
   payments: ["super_admin", "manager", "receptionist"],
   reports: ["super_admin", "manager"],
@@ -34,6 +35,7 @@ export const ACTIONS = {
   deleteRecords: ["super_admin", "manager"],
   manageClients: ["super_admin", "manager", "receptionist"],
   seeMoney: ["super_admin", "manager", "receptionist"],
+  managePayroll: ["super_admin", "manager"],
 } as const satisfies Record<string, readonly Role[]>;
 export type ActionKey = keyof typeof ACTIONS;
 

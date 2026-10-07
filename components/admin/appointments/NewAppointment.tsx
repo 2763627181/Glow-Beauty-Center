@@ -8,6 +8,7 @@ import { money } from "@/lib/format";
 import { useAdmin, useCan } from "../AdminContext";
 import { Alert } from "../primitives";
 import { Modal, useToast } from "../overlay";
+import { OverlapNotice, useOverlapHints } from "./OverlapNotice";
 import u from "../ui.module.css";
 import { eligibleStaff } from "./lines";
 import { fromLocalInput, toLocalInput } from "./useApptActions";
@@ -36,10 +37,13 @@ export function NewAppointmentDialog({ mode, preset, onClose }: { mode: Mode; pr
   const [known, setKnown] = useState<string | null>(null);
 
   const set = (p: Partial<typeof f>) => setF((x) => ({ ...x, ...p }));
+  const [openedAt] = useState(() => new Date().toISOString()); // los clientes sin cita empiezan "ahora"
 
   const chosen = sel.map((k) => options.find((o) => o.key === k)!).filter(Boolean);
   const total = chosen.reduce((t, o) => t + o.price, 0);
   const minutes = chosen.reduce((t, o) => t + o.durationMin, 0);
+  const whenISO = mode === "walkin" ? openedAt : f.when ? fromLocalInput(f.when) : null;
+  const hints = useOverlapHints(whenISO, chosen.map((o) => ({ employeeId: empBy[o.key] || null, minutes: o.durationMin })));
   const shown = useMemo(() => options.filter((o) => o.label.toLowerCase().includes(q.trim().toLowerCase())), [options, q]);
 
   function toggle(key: string, on: boolean) {
@@ -137,6 +141,7 @@ export function NewAppointmentDialog({ mode, preset, onClose }: { mode: Mode; pr
         )}
 
         <div className={`${u.field} ${u.span2}`}><label htmlFor="n-notes">Notas</label><textarea id="n-notes" maxLength={500} value={f.notes} onChange={(e) => set({ notes: e.target.value })} /></div>
+        {hints.length > 0 && <div className={u.span2} style={{ display: "grid", gap: 6 }}><OverlapNotice hints={hints} /></div>}
         {error && <div className={u.span2}><Alert>{error}</Alert></div>}
         <div className={u.span2}><Button block onClick={submit} disabled={pending || sel.length === 0}>{pending ? "Guardando…" : mode === "walkin" ? "Registrar" : "Crear cita"}</Button></div>
       </div>

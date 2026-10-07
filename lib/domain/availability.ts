@@ -13,8 +13,10 @@ export type EmployeeDay = {
   employeeId: string;
   /** Jornada del especialista ese día (HH:mm). null = no trabaja. */
   work: { start: string; end: string; breakStart?: string | null; breakEnd?: string | null } | null;
-  /** Líneas de otras citas, bloqueos propios y ausencias. */
+  /** Bloqueos propios y ausencias: nadie puede agendarse encima. */
   busy: Interval[];
+  /** Líneas de otras citas: pueden coincidir hasta el tope `maxConcurrent` (citas al mismo tiempo). */
+  booked?: Interval[];
 };
 
 export type LineReq = {
@@ -34,6 +36,8 @@ export type SlotInput = {
   slotMinutes: number;
   now: number;
   minNoticeHours: number;
+  /** Citas que una especialista puede tener al mismo tiempo (1 = una a la vez). Por defecto 1. */
+  maxConcurrent?: number;
 };
 
 export type Assignment = { lineIndex: number; employeeId: string; start: number; end: number };
@@ -42,6 +46,19 @@ export type Slot = { time: string; start: string; assignments: Assignment[] };
 const MIN = 60_000;
 const toMs = (date: string, hhmm: string) => new Date(`${date}T${hhmm}:00-04:00`).getTime();
 const overlaps = (a: Interval, b: Interval) => a.start < b.end && b.start < a.end;
+
+/** Máximo de intervalos que coinciden en un mismo instante dentro de [a, b). Los extremos son semiabiertos: terminar a las 10:00 no choca con empezar a las 10:00. */
+export function maxDepth(list: Interval[], a: number, b: number): number {
+  const ev: [number, number][] = [];
+  for (const x of list) {
+    if (x.end <= x.start || x.end <= a || x.start >= b) continue;
+    ev.push([Math.max(x.start, a), 1], [Math.min(x.end, b), -1]);
+  }
+  ev.sort((p, q) => p[0] - q[0] || p[1] - q[1]); // al empatar, primero terminan y luego empiezan
+  let cur = 0, max = 0;
+  for (const [, d] of ev) { cur += d; if (cur > max) max = cur; }
+  return max;
+}
 const pad = (n: number) => String(n).padStart(2, "0");
 
 /** Permutaciones de índices; la primera siempre es el orden original. Se limita a 4 líneas (24 órdenes). */
@@ -59,6 +76,7 @@ function orders(n: number): number[][] {
 
 export function computeSlots(input: SlotInput): Slot[] {
   const { date, businessHours, employees, lines, slotMinutes, now, minNoticeHours } = input;
+  const maxConcurrent = Math.max(1, Math.floor(input.maxConcurrent ?? 1));
   if (!businessHours || !lines.length || slotMinutes <= 0 || lines.some((l) => l.minutes <= 0)) return [];
 
   const open = toMs(date, businessHours.open);
@@ -69,14 +87,14 @@ export function computeSlots(input: SlotInput): Slot[] {
   const byId = new Map(employees.map((e) => [e.employeeId, e]));
 
   // Ventana de trabajo y bloqueos fijos por especialista
-  const fixed = new Map<string, { from: number; to: number; busy: Interval[]; load: number }>();
+  const fixed = new Map<string, { from: number; to: number; busy: Interval[]; booked: Interval[]; load: number }>();
   for (const e of employees) {
     if (!e.work) continue;
     const busy: Interval[] = [...e.busy, ...input.businessBlocks];
     if (e.work.breakStart && e.work.breakEnd) busy.push({ start: toMs(date, e.work.breakStart), end: toMs(date, e.work.breakEnd) });
     fixed.set(e.employeeId, {
-      from: Math.max(open, toMs(date, e.work.start)), to: Math.min(close, toMs(date, e.work.end)), busy,
-      load: e.busy.reduce((t, b) => t + Math.max(0, b.end - b.start), 0),
+      from: Math.max(open, toMs(date, e.work.start)), to: Math.min(close, toMs(date, e.work.end)), busy, booked: e.booked ?? [],
+      load: [...e.busy, ...(e.booked ?? [])].reduce((t, b) => t + Math.max(0, b.end - b.start), 0),
     });
   }
 
@@ -93,7 +111,8 @@ export function computeSlots(input: SlotInput): Slot[] {
         const f = fixed.get(id);
         if (!f || a < f.from || b > f.to) return false;
         const iv = { start: a, end: b };
-        return !f.busy.some((x) => overlaps(iv, x)) && !(taken.get(id) ?? []).some((x) => overlaps(iv, x));
+        if (f.busy.some((x) => overlaps(iv, x)) || (taken.get(id) ?? []).some((x) => overlaps(iv, x))) return false;
+        return maxDepth(f.booked, a, b) < maxConcurrent;
       };
       const solve = (pos: number, at: number, prev: string | null): Assignment[] | null => {
         if (pos === order.length) return [];

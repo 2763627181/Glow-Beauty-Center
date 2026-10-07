@@ -6,10 +6,14 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
 import { deleteEmployee, moveEmployee } from "@/lib/actions/admin/staff";
+import { birthdayLabel, cumpleLabel } from "@/lib/domain/birthday";
 import { ConfirmDialog, useToast } from "../overlay";
 import u from "../ui.module.css";
 
-type E = { id: string; full_name: string; specialty: string | null; avatar_url: string | null; active: boolean; services: number };
+type E = {
+  id: string; full_name: string; specialty: string | null; avatar_url: string | null; active: boolean; services: number;
+  schedules: number; online: boolean; birthday: { month: number; day: number; in: number } | null;
+};
 
 /** Lista de especialistas con orden (↑↓). El orden define cómo aparecen en la web y en la agenda. */
 export function StaffList({ staff }: { staff: E[] }) {
@@ -20,13 +24,19 @@ export function StaffList({ staff }: { staff: E[] }) {
   return (
     <div className={u.kpis}>
       {staff.map((e, i) => (
-        <div key={e.id} className={u.card} style={{ display: "flex", gap: 14, alignItems: "center", opacity: e.active ? 1 : 0.65 }}>
+        <div key={e.id} className={u.card} style={{ display: "flex", gap: 14, alignItems: "center", background: e.active ? undefined : "#f3f0ee" }}>
           <Link href={`/admin/staff/${e.id}`} style={{ display: "flex", gap: 14, alignItems: "center", flex: 1, minWidth: 0 }}>
-            <span style={{ position: "relative", width: 56, height: 56, borderRadius: "50%", overflow: "hidden", background: "var(--color-blush)", flex: "none" }}>
+            <span style={{ position: "relative", width: 56, height: 56, borderRadius: "50%", overflow: "hidden", background: "var(--color-blush)", flex: "none", opacity: e.active ? 1 : 0.55 }}>
               {e.avatar_url && <Image src={e.avatar_url} alt="" fill sizes="56px" style={{ objectFit: "cover" }} />}
             </span>
             <span><strong>{e.full_name}</strong><br /><span className={u.sub}>{e.specialty ?? "—"} · {e.services} servicios</span><br />
-              <span className={`${u.badge} ${e.active ? u.green : u.gray}`}>{e.active ? "Activo" : "Inactivo"}</span></span>
+              <span style={{ display: "inline-flex", flexWrap: "wrap", gap: 4 }}>
+                <span className={`${u.badge} ${e.active ? u.green : u.gray}`}>{e.active ? "Activo" : "Inactivo"}</span>
+                {e.active && e.online && e.schedules === 0 && <span className={`${u.badge} ${u.gold}`}>Sin horario</span>}
+                {e.active && e.online && e.services === 0 && <span className={`${u.badge} ${u.gold}`}>Sin servicios</span>}
+                {e.active && e.birthday && e.birthday.in <= 7 && <span className={`${u.badge} ${u.pink}`}>🎂 {cumpleLabel(e.birthday.in)}</span>}
+              </span>
+              {e.birthday && <><br /><span className={u.sub}>Cumpleaños: {birthdayLabel(e.birthday.month, e.birthday.day)}</span></>}</span>
           </Link>
           <div style={{ display: "grid", gap: 4 }}>
             <Button size="sm" variant="secondary" disabled={pending || i === 0} onClick={() => move(e.id, -1)} aria-label={`Subir ${e.full_name}`}>↑</Button>

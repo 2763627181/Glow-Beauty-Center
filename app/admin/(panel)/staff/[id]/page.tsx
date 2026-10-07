@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { PageHead } from "@/components/admin/primitives";
+import { Alert, PageHead } from "@/components/admin/primitives";
 import { AccountSection } from "@/components/admin/staff/AccountSection";
 import { EmployeeForm } from "@/components/admin/staff/EmployeeForm";
 import { StaffDelete } from "@/components/admin/staff/StaffTools";
@@ -22,7 +22,7 @@ export default async function StaffDetail({ params }: PageProps<"/admin/staff/[i
     return (
       <>
         <PageHead title="Nuevo especialista" />
-        <EmployeeForm id={null} services={services} initial={{ full_name: "", avatar_url: null, phone: "", email: "", specialty: "", bio: "", commission_pct: null, active: true, accepts_online_booking: true, service_ids: [] }} />
+        <EmployeeForm id={null} services={services} initial={{ full_name: "", avatar_url: null, phone: "", email: "", specialty: "", bio: "", commission_pct: null, base_salary: 0, active: true, accepts_online_booking: true, birth_month: null, birth_day: null, service_ids: [] }} />
       </>
     );
   }
@@ -42,9 +42,12 @@ export default async function StaffDetail({ params }: PageProps<"/admin/staff/[i
     <>
       <PageHead title={e.full_name} sub={e.specialty ?? undefined}><StaffDelete id={e.id} name={e.full_name} /></PageHead>
       <div className={u.grid}>
+        {e.active && e.accepts_online_booking && (scheds ?? []).length === 0 && <Alert kind="warn"><strong>Sin horario de trabajo.</strong> Mientras no lo guardes abajo (sección «Horario semanal»), {e.full_name} no aparece en la reserva en línea.</Alert>}
+        {e.active && e.accepts_online_booking && (links ?? []).length === 0 && <Alert kind="warn"><strong>Sin servicios asignados.</strong> Marca en «Servicios que realiza» lo que hace {e.full_name}; si no, la web no le ofrece ninguno.</Alert>}
         <EmployeeForm id={e.id} services={services} initial={{
           full_name: e.full_name, avatar_url: e.avatar_url, phone: e.phone, email: e.email, specialty: e.specialty, bio: e.bio,
-          commission_pct: e.commission_pct == null ? null : Number(e.commission_pct), active: e.active, accepts_online_booking: e.accepts_online_booking,
+          commission_pct: e.commission_pct == null ? null : Number(e.commission_pct), base_salary: Number(e.base_salary ?? 0), active: e.active, accepts_online_booking: e.accepts_online_booking,
+          birth_month: e.birth_month, birth_day: e.birth_day,
           service_ids: (links ?? []).map((l) => l.service_id),
         }} />
         <ScheduleEditor employeeId={e.id} initial={days} />

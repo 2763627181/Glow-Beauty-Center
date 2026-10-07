@@ -3,7 +3,9 @@
  * Puro (sin base de datos ni Next): las rutas leen los datos y estas funciones deciden qué columnas, totales y secciones llevan.
  */
 import type { ApptRow } from "../data/appointments.ts";
+import type { PayrollLine, PayrollRun } from "../data/payroll.ts";
 import { apptSubtotal, apptTotal } from "../data/appointment-math.ts";
+import { periodLabel } from "../domain/payroll.ts";
 import { summarize, type ApptIn, type Row, type SaleIn, type SummaryOpts } from "../domain/reports.ts";
 import { SOURCE_LABEL, STATUS_META } from "../domain/status.ts";
 import { duration, fmtDate, fmtTime } from "../format.ts";
@@ -333,3 +335,87 @@ export function salesDoc(r: ReportRange, sales: SaleIn[], refs: SummaryOpts, ctx
 }
 
 export type { Section };
+
+
+/* ═════════════════════════════ NÓMINA ═════════════════════════════ */
+const slug = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+function payrollFilters(run: PayrollRun): [string, string][] {
+  const f: [string, string][] = [
+    ["Período", periodLabel(run.period_start, run.period_end)],
+    ["Estado", run.status === "pagada" ? `Pagada el ${fmtDate(dayNoon(run.paid_on!), { day: "numeric", month: "long", year: "numeric" })}${run.paid_method ? ` · ${run.paid_method}` : ""}${run.paid_reference ? ` · Ref. ${run.paid_reference}` : ""}` : "Borrador (aún no pagada)"],
+    ["Ventas incluidas", run.only_paid ? "Solo las cobradas por completo (sin reembolsadas)" : "Cobradas y pendientes (sin reembolsadas)"],
+    ["Propinas", run.include_tips ? "Incluidas (se reparten entre quienes atendieron cada venta)" : "No incluidas"],
+  ];
+  if (run.notes) f.push(["Notas", run.notes]);
+  return f;
+}
+
+const detailCols = (withEmployee: boolean): Col[] => [
+  ...(withEmployee ? [col("emp", "Especialista", { width: 24 })] : []),
+  col("fecha", "Fecha", { kind: "date" }), col("venta", "Venta", { width: 17 }), col("serv", "Servicio / producto", { width: 34 }),
+  col("total", "Importe", { kind: "money", total: "sum" }), col("pct", "% comisión", { kind: "percent" }), col("com", "Comisión", { kind: "money", total: "sum" }),
+];
+
+/** Nómina completa: una fila por especialista y el detalle de las ventas que dieron origen a cada comisión. */
+export function payrollDoc(run: PayrollRun, lines: PayrollLine[], ctx: Ctx): ExportDoc {
+  const sum = (pick: (l: PayrollLine) => number) => round2(lines.reduce((t, l) => t + pick(l), 0));
+  const state = run.status === "pagada" ? "Pagada" : "Borrador";
+  const rows: R[] = lines.map((l) => ({
+    emp: l.employee_name, serv: l.services_count, ventas: l.sales_total, com: l.commission, prop: l.tips, base: l.base_salary, bonos: l.bonus, desc: l.deductions, neto: l.net, notas: l.notes ?? "",
+  }));
+  const detail: R[] = lines.flatMap((l) => l.detail.map((d) => ({ emp: l.employee_name, fecha: d.date, venta: d.sale, serv: d.description, total: d.total, pct: d.pct / 100, com: d.commission })));
+  return {
+    fileBase: `glow-nomina-${run.period_start}_${run.period_end}`, title: run.title, subtitle: `${run.run_number} · ${state}`,
+    business: ctx.business, generatedAt: ctx.generatedAt, filters: payrollFilters(run),
+    kpis: [
+      { label: "Total a pagar", value: sum((l) => l.net), kind: "money" }, { label: "Especialistas", value: lines.length, kind: "int" },
+      { label: "Ventas del período", value: sum((l) => l.sales_total), kind: "money" }, { label: "Comisiones", value: sum((l) => l.commission), kind: "money" },
+      { label: "Propinas", value: sum((l) => l.tips), kind: "money" }, { label: "Sueldos base", value: sum((l) => l.base_salary), kind: "money" },
+      { label: "Bonos", value: sum((l) => l.bonus), kind: "money" }, { label: "Descuentos", value: sum((l) => l.deductions), kind: "money" },
+    ],
+    sections: [
+      {
+        name: "Nómina", title: "Pago por especialista", subtitle: "Neto = sueldo base + comisión + propinas + bonos, menos descuentos",
+        columns: [
+          col("emp", "Especialista", { width: 26 }), col("serv", "Servicios", { kind: "int", total: "sum" }), col("ventas", "Ventas", { kind: "money", total: "sum" }), col("com", "Comisión", { kind: "money", total: "sum" }),
+          col("prop", "Propinas", { kind: "money", total: "sum" }), col("base", "Sueldo base", { kind: "money", total: "sum" }), col("bonos", "Bonos", { kind: "money", total: "sum" }),
+          col("desc", "Descuentos", { kind: "money", total: "sum" }), col("neto", "Neto a pagar", { kind: "money", total: "sum" }), col("notas", "Notas", { width: 36, pdf: false }),
+        ],
+        rows, totals: { label: `Total (${lines.length} especialista${lines.length === 1 ? "" : "s"})` }, emptyText: "Esta nómina no tiene especialistas.",
+      },
+      {
+        name: "Detalle de ventas", title: "Ventas que originan la comisión", subtitle: "Una fila por servicio o producto, agrupado por especialista",
+        columns: detailCols(true), rows: detail, totals: { label: "Total" }, emptyText: "No hubo ventas en el período.",
+        note: "El PDF muestra las primeras filas; el Excel y el CSV incluyen todo.",
+      },
+    ],
+    csv: "first", pdfMaxRows: 80,
+  };
+}
+
+/** Volante de pago de una especialista: resumen de conceptos y las ventas que sustentan su comisión. */
+export function paySlipDoc(run: PayrollRun, line: PayrollLine, ctx: Ctx): ExportDoc {
+  const concepts: R[] = [
+    { concepto: "Sueldo base", monto: line.base_salary },
+    { concepto: `Comisión por servicios (${line.services_count} servicio${line.services_count === 1 ? "" : "s"}, ventas por ${moneyFixed(line.sales_total)})`, monto: line.commission },
+    { concepto: "Propinas", monto: line.tips },
+    { concepto: "Bonos", monto: line.bonus },
+    { concepto: "Descuentos", monto: -line.deductions },
+  ];
+  const detail: R[] = line.detail.map((d) => ({ fecha: d.date, venta: d.sale, serv: d.description, total: d.total, pct: d.pct / 100, com: d.commission }));
+  return {
+    fileBase: `glow-volante-${slug(line.employee_name) || "especialista"}-${run.period_start}_${run.period_end}`, title: "Volante de pago", subtitle: `${line.employee_name} · ${periodLabel(run.period_start, run.period_end)}`,
+    business: ctx.business, generatedAt: ctx.generatedAt, filters: payrollFilters(run).filter(([k]) => k !== "Notas"),
+    kpis: [{ label: "Neto a pagar", value: line.net, kind: "money" }, { label: "Comisión", value: line.commission, kind: "money" }, { label: "Propinas", value: line.tips, kind: "money" }, { label: "Sueldo base", value: line.base_salary, kind: "money" }],
+    sections: [
+      {
+        name: "Conceptos", title: "Conceptos", subtitle: `${run.title} · ${run.run_number}`,
+        columns: [col("concepto", "Concepto"), col("monto", "Monto", { kind: "money", total: "sum" })],
+        rows: concepts, totals: { label: "Neto a pagar" }, note: line.notes ? `Nota: ${line.notes}` : undefined,
+      },
+      { name: "Servicios", title: "Servicios realizados", subtitle: "Ventas incluidas en la comisión", columns: detailCols(false), rows: detail, totals: { label: "Total" }, emptyText: "No hubo ventas en el período." },
+    ],
+    csv: "all", pdfMaxRows: 60,
+  };
+}

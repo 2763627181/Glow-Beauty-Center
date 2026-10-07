@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAccess, requireAction } from "@/lib/auth";
 import { friendlyError } from "@/lib/domain/errors";
+import { findOverlaps, lineSpans, type OverlapHint, type TimedLine } from "@/lib/domain/overlap";
 import { queueCalendarDelete, queueCalendarSync, syncAppointmentToCalendar } from "@/lib/integrations/google-calendar";
 import { isValidDRPhone, normalizePhone } from "@/lib/phone";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -34,6 +35,33 @@ export async function setAppointmentStatus(id: string, status: (typeof STATUSES)
   if (!data) return { ok: false, error: "No tienes permiso sobre esta cita." };
   touch(id);
   return { ok: true };
+}
+
+/** Aviso previo (no bloquea nada): ¿la especialista ya tiene citas a esa hora? Se pueden agendar todas las que se quiera. */
+export async function previewOverlaps(input: { start: string; lines: TimedLine[]; ignoreAppointmentId?: string }): Promise<OverlapHint[]> {
+  await requireAction("manageAppointments");
+  const p = z.object({
+    start: z.iso.datetime(), ignoreAppointmentId: z.uuid().optional(),
+    lines: z.array(z.object({ employeeId: z.uuid().nullable(), minutes: z.number().min(0).max(1440) })).max(30),
+  }).safeParse(input);
+  if (!p.success) return [];
+  const spans = lineSpans(new Date(p.data.start).getTime(), p.data.lines);
+  if (!spans.length) return [];
+  const from = new Date(Math.min(...spans.map((x) => x.start))).toISOString();
+  const to = new Date(Math.max(...spans.map((x) => x.end))).toISOString();
+  const sb = await createClient();
+  const { data } = await sb.from("appointment_services")
+    .select("employee_id,start_time,end_time,appointment_id,employee:employees(full_name),appointment:appointments(client:clients(first_name,last_name))")
+    .eq("active", true).in("employee_id", [...new Set(spans.map((x) => x.employeeId))])
+    .lt("start_time", to).gt("end_time", from).limit(200);
+  const names = new Map<string, string>();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rows = (data ?? []) as any[];
+  for (const r of rows) if (r.employee?.full_name) names.set(r.employee_id, r.employee.full_name);
+  return findOverlaps(spans, rows.filter((r) => r.start_time && r.end_time).map((r) => ({
+    employeeId: r.employee_id as string, start: new Date(r.start_time).getTime(), end: new Date(r.end_time).getTime(),
+    client: `${r.appointment?.client?.first_name ?? ""} ${r.appointment?.client?.last_name ?? ""}`.trim() || "Cliente", appointmentId: r.appointment_id as string,
+  })), names, p.data.ignoreAppointmentId);
 }
 
 export async function rescheduleAppointment(id: string, startISO: string, employeeId: string | null): Promise<ActionResult> {

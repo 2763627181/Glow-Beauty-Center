@@ -15,11 +15,15 @@ export default async function ServicesAdmin({ searchParams }: PageProps<"/admin/
   const sp = await searchParams;
   const tab = ["servicios", "categorias", "productos"].includes(String(sp.tab)) ? String(sp.tab) : "servicios";
   const sb = await createClient();
-  const [{ data: cats }, { data: svcs }, { data: prods }] = await Promise.all([
+  const [{ data: cats }, { data: svcs }, { data: prods }, { data: cover }] = await Promise.all([
     sb.from("service_categories").select("*").order("display_order"),
     sb.from("services").select("id,name,price,price_from,duration_minutes,active,featured,pending_review,category_id,display_order,service_variants(id)").order("display_order"),
     sb.from("products").select("*").order("display_order").order("name"),
+    sb.from("employee_services").select("service_id,employee:employees(active,accepts_online_booking)"),
   ]);
+  // «Nadie lo realiza» = tiene especialistas asignadas pero ninguna está activa y visible en la web (sin ninguna asignada, lo puede hacer cualquiera)
+  const hasLinks = new Set((cover ?? []).map((x: any) => x.service_id));
+  const covered = new Set((cover ?? []).filter((x: any) => x.employee?.active && x.employee?.accepts_online_booking).map((x: any) => x.service_id));
   return (
     <>
       <PageHead title="Servicios" sub="Precios, duraciones, categorías y productos. Todo lo que ve el cliente sale de aquí.">
@@ -38,7 +42,7 @@ export default async function ServicesAdmin({ searchParams }: PageProps<"/admin/
                   <div className={u.tableWrap}>
                     <table className={`${u.table} ${u.stack}`}>
                       <thead><tr><th>Servicio</th><th className={u.num}>Precio</th><th>Duración</th><th>Estado</th><th><span className="sr-only">Acciones</span></th></tr></thead>
-                      <tbody>{list.map((s: any) => <ServiceRow key={s.id} s={{ ...s, price: Number(s.price), variants: s.service_variants.length }} />)}</tbody>
+                      <tbody>{list.map((s: any) => <ServiceRow key={s.id} s={{ ...s, price: Number(s.price), variants: s.service_variants.length, nobody: hasLinks.has(s.id) && !covered.has(s.id) }} />)}</tbody>
                     </table>
                   </div>
                 )}
