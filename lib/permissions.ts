@@ -32,7 +32,8 @@ export const ACTIONS = {
   advanceOwn: ["super_admin", "manager", "receptionist", "specialist"], // iniciar / completar
   charge: ["super_admin", "manager", "receptionist"],
   voidOrRefund: ["super_admin", "manager"],
-  deleteRecords: ["super_admin", "manager"],
+  deleteRecords: ["super_admin", "manager"], // eliminar citas, solicitudes, ventas y clientes
+  clearNotifications: ["super_admin", "manager", "receptionist"], // borrar avisos de la campana
   manageClients: ["super_admin", "manager", "receptionist"],
   seeMoney: ["super_admin", "manager", "receptionist"],
   managePayroll: ["super_admin", "manager"],

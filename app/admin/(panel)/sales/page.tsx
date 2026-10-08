@@ -1,13 +1,15 @@
 import { uniqueDescriptions } from "@/lib/domain/serviceLines";
 import Link from "next/link";
 import { Suspense } from "react";
-import { EmptyState, PageHead, PayBadge } from "@/components/admin/primitives";
+import { EmptyState, PageHead } from "@/components/admin/primitives";
+import { SalesTable } from "@/components/admin/sales/SalesTable";
 import { QuickSale } from "@/components/admin/sales/QuickSale";
 import u from "@/components/admin/ui.module.css";
 import { UrlSearch } from "@/components/admin/UrlSearch";
 import { requireAccess } from "@/lib/auth";
 import { applyClientSearch, cleanTerm } from "@/lib/data/client-search";
-import { drToISO, fmtDate, money } from "@/lib/format";
+import { drToISO } from "@/lib/format";
+import { allowed } from "@/lib/permissions";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata = { title: "Ventas" };
@@ -16,7 +18,7 @@ const isDay = (v: unknown): v is string => typeof v === "string" && /^\d{4}-\d{2
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 export default async function SalesPage({ searchParams }: PageProps<"/admin/sales">) {
-  await requireAccess("sales");
+  const session = await requireAccess("sales");
   const sp = await searchParams;
   const page = Math.max(1, Number(sp.page) || 1);
   const status = typeof sp.status === "string" ? sp.status : "";
@@ -65,27 +67,12 @@ export default async function SalesPage({ searchParams }: PageProps<"/admin/sale
       </div>
       <div className={u.card}>
         {!data?.length ? <EmptyState title="Sin ventas" text={search || from || to || status ? "No hay ventas con estos filtros." : "Las ventas de citas se crean solas al completarlas; también puedes registrar una venta rápida."} /> : (
-          <div className={u.tableWrap}>
-            <table className={`${u.table} ${u.stack}`}>
-              <thead><tr><th>Número</th><th>Fecha</th><th>Cliente</th><th>Servicios</th><th>Especialista</th><th className={u.num}>Subtotal</th><th className={u.num}>Desc.</th><th className={u.num}>Total</th><th>Método</th><th>Estado</th></tr></thead>
-              <tbody>
-                {data.map((s: any) => (
-                  <tr key={s.id}>
-                    <td data-label="Número"><Link className={u.link} href={`/admin/sales/${s.id}`}>{s.sale_number}</Link></td>
-                    <td data-label="Fecha">{fmtDate(s.completed_at, { day: "numeric", month: "short" })}</td>
-                    <td data-label="Cliente">{s.client ? `${s.client.first_name} ${s.client.last_name}` : "Mostrador"}</td>
-                    <td data-label="Servicios">{uniqueDescriptions(s.sale_items).join(", ")}</td>
-                    <td data-label="Especialista">{s.employee?.full_name ?? "—"}</td>
-                    <td data-label="Subtotal" className={u.num}>{money(s.subtotal)}</td>
-                    <td data-label="Desc." className={u.num}>{Number(s.discount) ? `−${money(s.discount)}` : "—"}</td>
-                    <td data-label="Total" className={u.num}><strong>{money(s.total)}</strong></td>
-                    <td data-label="Método">{[...new Set(s.payments.filter((p: any) => p.status === "pagado").map((p: any) => label.get(p.method) ?? p.method))].join(", ") || "—"}</td>
-                    <td data-label="Estado"><PayBadge status={s.payment_status} />{s.voided_at && <span className={`${u.badge} ${u.red}`} style={{ marginLeft: 6 }}>Anulada</span>}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <SalesTable canDelete={allowed(session.role, "deleteRecords")} rows={data.map((s: any) => ({
+            id: s.id, sale_number: s.sale_number, completed_at: s.completed_at, client: s.client ? `${s.client.first_name} ${s.client.last_name}` : "Mostrador",
+            services: uniqueDescriptions(s.sale_items).join(", "), employee: s.employee?.full_name ?? "—", subtotal: Number(s.subtotal), discount: Number(s.discount), total: Number(s.total),
+            methods: [...new Set(s.payments.filter((p: any) => p.status === "pagado").map((p: any) => label.get(p.method) ?? p.method))].join(", "),
+            payment_status: s.payment_status, voided: !!s.voided_at,
+          }))} />
         )}
         {pages > 1 && (
           <nav style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 16 }} aria-label="Paginación">

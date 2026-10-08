@@ -53,6 +53,7 @@
 
 .filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; align-items: center; }
 .filters select, .filters input { min-height: 42px; padding: 0 12px; border: 1px solid rgb(41 37 36 / 0.2); border-radius: 12px; background: #fff; max-width: 100%; min-width: 0; }
+.bulkBar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 10px 14px; margin-bottom: 12px; border-radius: 12px; background: var(--color-blush); border: 1px solid rgb(159 77 102 / 0.25); }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chipPick { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border: 1px solid rgb(41 37 36 / 0.2); border-radius: 999px; background: #fff; font-size: 0.88rem; cursor: pointer; }
 .chipPick:has(input:checked) { background: var(--color-blush); border-color: var(--color-primary); }

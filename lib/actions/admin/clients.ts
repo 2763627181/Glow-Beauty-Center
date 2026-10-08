@@ -48,21 +48,6 @@ export async function setClientActive(id: string, active: boolean): Promise<Acti
   return { ok: true };
 }
 
-/** Elimina un cliente sin historial. Con citas o ventas, no se borra: se sugiere desactivar o fusionar. */
-export async function deleteClient(id: string): Promise<ActionResult> {
-  await requireAction("deleteRecords");
-  const sb = await createClient();
-  const [{ count: a }, { count: s }] = await Promise.all([
-    sb.from("appointments").select("id", { count: "exact", head: true }).eq("client_id", id),
-    sb.from("sales").select("id", { count: "exact", head: true }).eq("client_id", id),
-  ]);
-  if ((a ?? 0) + (s ?? 0) > 0) return { ok: false, error: `Este cliente tiene ${a ?? 0} cita(s) y ${s ?? 0} venta(s). Para conservar el historial, desactívalo o fusiónalo con otro cliente.` };
-  const { data, error } = await sb.from("clients").delete().eq("id", id).select("id");
-  if (error || !data?.length) return { ok: false, error: "No se pudo eliminar." };
-  revalidatePath("/admin/clients", "layout");
-  return { ok: true };
-}
-
 export async function mergeClients(keepId: string, removeId: string): Promise<ActionResult> {
   await requireAction("deleteRecords");
   const sb = await createClient();

@@ -9,7 +9,7 @@ export const ENTITY_LABEL: Record<string, string> = {
 };
 
 export const ACTION_LABEL: Record<string, string> = {
-  insert: "Creó", update: "Editó", delete: "Eliminó", complete_appointment: "Completó cita", void_sale: "Anuló venta", quick_sale: "Venta rápida",
+  insert: "Creó", update: "Editó", delete: "Eliminó", delete_records: "Eliminó (varios)", complete_appointment: "Completó cita", void_sale: "Anuló venta", quick_sale: "Venta rápida",
 };
 
 const FIELD_LABEL: Record<string, string> = {

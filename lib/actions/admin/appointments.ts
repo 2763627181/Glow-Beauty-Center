@@ -6,7 +6,7 @@ import { z } from "zod";
 import { requireAccess, requireAction } from "@/lib/auth";
 import { friendlyError } from "@/lib/domain/errors";
 import { findOverlaps, lineSpans, type OverlapHint, type TimedLine } from "@/lib/domain/overlap";
-import { queueCalendarDelete, queueCalendarSync, syncAppointmentToCalendar } from "@/lib/integrations/google-calendar";
+import { queueCalendarSync, syncAppointmentToCalendar } from "@/lib/integrations/google-calendar";
 import { isValidDRPhone, normalizePhone } from "@/lib/phone";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -106,20 +106,6 @@ export async function updateAppointment(id: string, input: UpdateAppointmentInpu
   if (error) return fail(error.message);
   touch(id);
   return { ok: true, total: Number(data.total) };
-}
-
-export async function deleteAppointment(id: string): Promise<ActionResult> {
-  await requireAction("deleteRecords");
-  const sb = await createClient();
-  const { data: sale } = await sb.from("sales").select("id").eq("appointment_id", id).maybeSingle();
-  if (sale) return { ok: false, error: "Esta cita ya generó una venta. Anula la venta en lugar de eliminar la cita." };
-  const { data: before } = await sb.from("appointments").select("google_calendar_event_id").eq("id", id).maybeSingle();
-  const { data, error } = await sb.from("appointments").delete().eq("id", id).select("id");
-  if (error) return fail(error.message);
-  if (!data?.length) return { ok: false, error: "No se pudo eliminar (¿ya no existe o no tienes permiso?)." };
-  refresh();
-  queueCalendarDelete(before?.google_calendar_event_id); // el evento también sale de Google Calendar
-  return { ok: true };
 }
 
 /* ───────── Pagos ───────── */

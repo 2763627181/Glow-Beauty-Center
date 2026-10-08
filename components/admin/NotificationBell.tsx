@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { BellIcon } from "@/components/ui/Icons";
 import { markAllNotificationsRead, markNotificationRead } from "@/lib/actions/admin/notifications";
+import { clearNotifications } from "@/lib/actions/admin/records";
 import { subscribeRealtime } from "@/lib/supabase/browser";
 import s from "./AdminShell.module.css";
 import { useToast } from "./overlay";
@@ -40,6 +41,13 @@ export function NotificationBell({ initial }: { initial: N[] }) {
     if (!r.ok) { setList(before); toast("No se pudieron marcar como leídas", "err"); }
   }
 
+  async function clear(onlyRead: boolean) {
+    const before = list;
+    setList((l) => (onlyRead ? l.filter((n) => !n.read_at) : []));
+    const r = await clearNotifications(onlyRead).catch(() => ({ ok: false as const, error: "" }));
+    if (!r.ok) { setList(before); toast("No se pudieron borrar los avisos", "err"); } else toast(r.deleted === 1 ? "Aviso borrado" : `${r.deleted} avisos borrados`);
+  }
+
   return (
     <div style={{ position: "relative" }}>
       <button className={s.iconBtn} onClick={() => setOpen((o) => !o)} aria-label={`Notificaciones, ${unread} sin leer`} aria-expanded={open}>
@@ -51,6 +59,12 @@ export function NotificationBell({ initial }: { initial: N[] }) {
           <motion.div className={s.panel} initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
             <div className={s.panelHead}>Notificaciones {unread > 0 && <button className={s.mini} onClick={readAll}>Marcar todo leído</button>}</div>
             {list.length === 0 && <p className={s.notif}>Sin notificaciones.</p>}
+            {list.length > 0 && (
+              <div className={s.panelHead} style={{ fontWeight: 400, gap: 8, justifyContent: "flex-end" }}>
+                {list.some((n) => n.read_at) && <button className={s.mini} onClick={() => clear(true)}>Borrar leídas</button>}
+                <button className={s.mini} onClick={() => clear(false)}>Borrar todas</button>
+              </div>
+            )}
             {list.map((n) => (
               <Link key={n.id} href={n.appointment_id ? `/admin/appointments/${n.appointment_id}` : n.sale_id ? `/admin/sales/${n.sale_id}` : n.employee_id ? `/admin/staff/${n.employee_id}` : "/admin/appointments"}
                 className={`${s.notif} ${n.read_at ? "" : s.unread}`} onClick={() => { read(n.id); setOpen(false); }}>

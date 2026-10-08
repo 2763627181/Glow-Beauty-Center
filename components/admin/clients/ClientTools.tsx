@@ -3,9 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
-import { deleteClient, mergeClients, saveClient, saveClientNotes, searchClientsForMerge, setClientActive } from "@/lib/actions/admin/clients";
+import { mergeClients, saveClient, saveClientNotes, searchClientsForMerge, setClientActive } from "@/lib/actions/admin/clients";
 import { Alert } from "../primitives";
-import { ConfirmDialog, Modal, useToast } from "../overlay";
+import { DeleteDialog } from "../DeleteDialog";
+import { Modal, useToast } from "../overlay";
 import u from "../ui.module.css";
 
 type C = { id?: string; first_name: string; last_name: string; phone: string; email: string | null };
@@ -59,7 +60,7 @@ export function ClientNotes({ id, initial, readOnly }: { id: string; initial: st
   );
 }
 
-/** Desactivar, fusionar duplicados y eliminar (este último solo gerencia, y solo sin historial). */
+/** Desactivar, fusionar duplicados y eliminar (este último solo gerencia; con historial pide confirmación y se lleva sus citas y ventas). */
 export function ClientManage({ id, name, active, canDelete }: { id: string; name: string; active: boolean; canDelete: boolean }) {
   const router = useRouter();
   const toast = useToast();
@@ -103,9 +104,7 @@ export function ClientManage({ id, name, active, canDelete }: { id: string; name
           )}
         </div>
       </Modal>
-      <ConfirmDialog open={del} danger title={`¿Eliminar a ${name}?`} confirmLabel="Eliminar" onClose={() => setDel(false)}
-        text="Solo se puede eliminar un cliente sin citas ni ventas. Si tiene historial, desactívalo o fusiónalo."
-        onConfirm={() => start(async () => { const r = await deleteClient(id); if (!r.ok) return toast(r.error, "err"); toast("Cliente eliminado"); router.push("/admin/clients"); })} />
+      {del && <DeleteDialog kind="clients" ids={[id]} title={`¿Eliminar a ${name}?`} onClose={() => setDel(false)} onDone={() => router.push("/admin/clients")} />}
     </>
   );
 }

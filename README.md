@@ -98,6 +98,7 @@ Los permisos se **imponen en la base de datos** (RLS y funciones SQL), no solo e
 | **Configuración** | datos del negocio y redes · **textos e imágenes de toda la web** (portada, secciones, pasos, “Nosotros”, páginas de Servicios/Reservar/Contacto, SEO) · horarios, feriados y bloqueos · reglas de reserva (incluye **cuántas citas al mismo tiempo** acepta la web por especialista) y políticas · métodos de pago · plantillas de WhatsApp · integraciones |
 | **Usuarios y permisos** | crear cuentas, cambiar rol, restablecer contraseña, desactivar, eliminar |
 | **Exportaciones** | botón **Exportar** en *Solicitudes y citas*, *Clientes* y *Reportes* (gerente o super admin): **Excel** (.xlsx con formato, filtros y totales), **PDF** con la marca del negocio, o **CSV** simple. Ver más abajo |
+| **Eliminar** | gerencia y super admin pueden eliminar **citas, solicitudes, clientes y ventas**, uno por uno (botón «Eliminar» en cada fila, tarjeta del Tablero y ficha) o varios a la vez (casillas + «Eliminar seleccionados»), incluso con historial: un cliente con citas o ventas se borra marcando «Borrar también su historial», y una cita completada se lleva su venta y sus pagos. Antes de borrar el diálogo cuenta exactamente qué se va (citas, ventas, pagos y dinero) y, si hay dinero o son varios, pide marcar «Entiendo que no se puede deshacer». Al borrar una venta puedes eliminar también su cita o dejarla «confirmada» para cobrarla de nuevo. La campana tiene «Borrar leídas» y «Borrar todas» (también recepción). Todo queda en Auditoría |
 | **Auditoría** | quién hizo qué y cuándo (filtros por módulo y usuario) |
 
 Lo que se guarda aquí se publica en la web **al instante** (no hay que esperar).
@@ -128,6 +129,12 @@ Cada exportación sale del mismo documento, así que los tres formatos siempre c
 - **Recalcular** vuelve a leer las ventas (conserva lo que escribiste). **Marcar como pagada** pide fecha, forma de pago y referencia y **congela** la nómina: ya no cambia aunque después se anule una venta (la base de datos lo impide). **Reabrir** permite corregirla a propósito (queda en Auditoría).
 - No se le paga dos veces el mismo día a la misma especialista: una nómina cuyo período se cruza con otra donde ya está se rechaza con un mensaje claro. Quincenas seguidas (1–15 y 16–30) no chocan.
 - **Exportar:** nómina completa (hoja de pago por especialista + detalle de las ventas que originan cada comisión) y **volante de pago** de cada una en PDF o Excel, con la marca del negocio.
+
+## Eliminar registros
+
+Los botones de eliminar los ven solo super administrador y gerencia (recepción y especialistas no). El borrado es **definitivo**: se llevan lo que dependía del registro (cita → su venta y pagos; venta → artículos y pagos; cliente con historial → sus citas, ventas y pagos) y ese dinero deja de aparecer en ventas, cobros, reportes y nómina. Si prefieres conservar el historial de un cliente, desactívalo o fusiónalo con otro en su ficha.
+
+Por dentro, la migración 15 instala funciones atómicas (`delete_appointments`, `delete_sales`, `delete_clients`, `clear_notifications`, `describe_deletion`): una sola transacción y cada fila borrada queda en Auditoría con quien la borró. Si todavía no están instaladas, el panel hace lo mismo por la API de Supabase (en varios pasos y anotando en Auditoría un resumen con el usuario), así que **funciona igual**; se recomienda aplicar la migración (SQL Editor de Supabase) para tener la versión atómica.
 
 ## Cómo funcionan las reservas
 
@@ -185,7 +192,7 @@ Los genera `pg_cron` dentro de Supabase cada 5 minutos (la migración 08 lo prog
 - **Fotos del salón:** la portada de la web, la página “Nosotros”, la imagen que sale al compartir el enlace por WhatsApp/redes y las primeras fotos de la galería son las **fotos reales del local** de la carpeta `Img del negocio/`. Se publicaron con `node --env-file=.env.local scripts/upload-business-photos.mjs` (se puede repetir sin duplicar; si cambias los archivos de la carpeta, vuelve a correrlo). También puedes cambiarlas cuando quieras desde el panel (*Configuración → Sitio web* y *Galería*).
 - **Fotos de ejemplo:** los servicios, las categorías y el resto de la galería traen fotos de stock para que la web luzca completa desde el primer día. Reemplázalas por las tuyas desde *Servicios*, *Servicios → Categorías* y *Galería* (puedes ocultar o eliminar las de ejemplo una por una).
 - **Conexión a la base de datos desde tu computadora:** si `npm run verify:db` o los scripts fallan con `ENOTFOUND`/`ETIMEDOUT`, tu red no tiene IPv6 o bloquea el puerto 5432. Usa en `DATABASE_URL` el *Session pooler* de Supabase (Connect → Session pooler: host `aws-0-<región>.pooler.supabase.com`, usuario `postgres.<ref>`). La web publicada no usa `DATABASE_URL`.
-- **Especialistas de ejemplo:** *Ana (demo)* y *Carla (demo)* existen solo para que la reserva tenga disponibilidad. Crea a tus especialistas reales (servicios + horario) y luego elimina las demo desde *Especialistas*. `supabase/seed/99_remove_demo.sql` borra de golpe todos los datos demo (citas, ventas y clientes incluidos); si ya hay citas reales asignadas a las demo, reasígnalas o cancélalas antes.
+- **Especialistas de ejemplo:** en una instalación nueva, la semilla `supabase/seed/02_demo.sql` crea a *Ana (demo)* y *Carla (demo)* solo para que la reserva tenga disponibilidad. En el salón real **ya se eliminaron** (junto con las citas y ventas de prueba que las usaban). Para quitarlas en otra instalación: crea a tus especialistas reales y borra los datos demo con `supabase/seed/99_remove_demo.sql` (citas, ventas y clientes demo incluidos); si ya hay citas o ventas reales asignadas a ellas la base lo impide: reasígnalas, cancélalas o bórralas antes. `npm run verify:db` no necesita las demo (las crea dentro de su transacción y la revierte).
 - **Imágenes huérfanas** (fotos reemplazadas o quitadas): `npm run cleanup:storage` las lista; `npm run cleanup:storage -- --delete` borra las de más de un día.
 - Para cambiar la contraseña de alguien: *Usuarios y permisos → Contraseña*. Cada persona cambia la suya en *Mi cuenta*.
 
@@ -195,14 +202,14 @@ Los genera `pg_cron` dentro de Supabase cada 5 minutos (la migración 08 lo prog
 |---|---|
 | `npm test` | pruebas unitarias (motor de disponibilidad con citas simultáneas, equipos y servicios al mismo tiempo, agenda en carriles, cumpleaños, nómina, reportes, líneas de cita, búsqueda, exportaciones a Excel/PDF/CSV, evento de Calendar, validaciones) |
 | `npm run typecheck` · `npm run lint` | TypeScript y ESLint |
-| `npm run verify:db` | 176 verificaciones de la base de datos (permisos por rol, ventas, pagos, citas simultáneas y tope opcional de la web, panel sin límites de especialista ni de fecha, cumpleaños, horarios por defecto, nómina, autoservicio…) dentro de una transacción que se revierte: no deja datos; sirve también con la base real |
+| `npm run verify:db` | 201 verificaciones de la base de datos (permisos por rol, ventas, pagos, citas simultáneas y tope opcional de la web, eliminar registros, panel sin límites de especialista ni de fecha, cumpleaños, horarios por defecto, nómina, autoservicio…) dentro de una transacción que se revierte: no deja datos; sirve también con la base real |
 | `npm run e2e` | pruebas de extremo a extremo con un navegador real (Playwright): web pública y reserva, todo el panel, permisos por rol, escritura tecla por tecla, tiempo real, subida de fotos y descarga de las exportaciones |
 | `npm run e2e:gcal` | sincronización con Google Calendar contra un servidor simulado |
 | `npm run e2e:a11y` | escaneo de accesibilidad (axe) de la web y del panel |
 
 > Las suites nuevas `simultaneas`, `nomina` y `equipos` (`node e2e/run-all.mjs simultaneas nomina equipos`) son **seguras con la base real**: solo crean y borran filas propias («E2E …», ventas de enero de 2020) y limpian hasta su rastro en Auditoría. Las demás sí modifican datos:
 >
-> ⚠ Las pruebas **E2E escriben y borran datos** en la base de `.env.local` y cambian (y restauran) algunos ajustes. Úsalas con un proyecto de Supabase de pruebas, no durante la operación real. Necesitan los datos demo y, la primera vez, `npx playwright install chromium`. Con la web corriendo (`npm run build && npm start`) ejecuta `npm run e2e`; crea y borra solas los usuarios `tmp-*@glow.test`.
+> ⚠ Las pruebas **E2E escriben y borran datos** en la base de `.env.local` y cambian (y restauran) algunos ajustes. Úsalas con un proyecto de Supabase de pruebas, no durante la operación real. Las suites antiguas (`public`, `admin-a/b/c`, `roles`…) usan las especialistas demo de la semilla, así que solo corren en un proyecto con datos demo; `simultaneas`, `nomina`, `equipos`, `exports` y `a11y` no las necesitan. La primera vez, `npx playwright install chromium`. Con la web corriendo (`npm run build && npm start`) ejecuta `npm run e2e`; crea y borra solas los usuarios `tmp-*@glow.test`.
 
 ## Estructura
 

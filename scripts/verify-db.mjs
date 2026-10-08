@@ -38,10 +38,17 @@ try {
   await q("begin");
   // Funciona también con la base real (donde las especialistas demo ya están desactivadas): todo corre en una transacción que se revierte.
   await q("update employees set active = true, accepts_online_booking = true where is_demo");
+  // Si las especialistas demo ya se eliminaron de la base, se recrean aquí (con su horario y sus servicios, igual que en la semilla):
+  // viven solo dentro de esta transacción, que siempre se revierte.
+  if (!(await q("select 1 from employees where is_demo and full_name like 'Ana%'")).rows.length) {
+    await q("insert into employees (full_name, specialty, bio, is_demo, display_order) values ('Ana (demo)','Uñas y pedicure','Especialista en manicure, builder y soft gel.',true,1), ('Carla (demo)','Cabello','Especialista en lavado, color y keratina.',true,2)");
+    await q("insert into employee_schedules (employee_id, weekday, start_time, end_time, break_start, break_end) select e.id, d, '09:00'::time, (case when d = 6 then '16:00' else '18:00' end)::time, '13:00'::time, '14:00'::time from employees e, generate_series(1,6) d where e.is_demo");
+    await q("insert into employee_services (employee_id, service_id) select e.id, s.id from employees e join services s on true join service_categories c on c.id = s.category_id where e.is_demo and ((e.full_name like 'Ana%' and c.slug in ('unas','pies-spa')) or (e.full_name like 'Carla%' and c.slug in ('cabello','tratamientos'))) on conflict do nothing");
+  }
 
   /* ───────── datos base ───────── */
-  const ana = (await q("select id from employees where full_name like 'Ana%'")).rows[0].id;
-  const carla = (await q("select id from employees where full_name like 'Carla%'")).rows[0].id;
+  const ana = (await q("select id from employees where is_demo and full_name like 'Ana%'")).rows[0].id;
+  const carla = (await q("select id from employees where is_demo and full_name like 'Carla%'")).rows[0].id;
   const svc = async (slug) => (await q("select id from services where slug=$1", [slug])).rows[0].id;
   const man = await svc("manicure"), gel = await svc("pintura-de-manos-gel"), lav = await svc("lavado-y-secado");
   const lavLargo = (await q("select id from service_variants where service_id=$1 and name='Pelo largo'", [lav])).rows[0].id;
@@ -413,6 +420,91 @@ try {
     { service_id: man, employee_id: ana, team: "w" }, { service_id: man, employee_id: carla, team: "w", parallel: true }] }))).rows[0].r;
   const lkH = (await q("select lookup_booking_public($1, '8295552005') r", [H.request_number])).rows[0].r;
   check("mi cita: un equipo se muestra como un solo servicio con el precio completo", lkH.lines.length === 1 && lkH.lines[0].name === "Manicure" && Number(lkH.lines[0].price) === 600, JSON.stringify(lkH.lines));
+
+
+  /* ───────── eliminar registros (citas, solicitudes, ventas, clientes, notificaciones) ───────── */
+  console.log("\n— Eliminar registros —");
+  await asAdmin();
+  const mkAppt = async (last, phone, status, hours) => (await q(...booking({ first_name: "Del", last_name: last, phone, source: "admin", status, start_time: iso(base + hours * 36e5), services: [{ service_id: man, employee_id: ana }] }))).rows[0].r;
+  const exists = async (table, id) => (await q("select 1 from " + table + " where id=$1", [id])).rows.length === 1;
+  const D1 = await mkAppt("Uno", "8295553001", "en_servicio", 900), D2 = await mkAppt("Dos", "8295553002", "confirmado", 910), D3 = await mkAppt("Tres", "8295553003", "solicitud", 920);
+  await asUser(uManager);
+  const sale1 = (await q("select complete_appointment($1) r", [D1.id])).rows[0].r;
+  await q("select record_sale_payment($1, 100, 'efectivo')", [sale1.sale_id]);
+  await asAdmin();
+
+  // Permisos: solo super admin y gerencia borran; recepción y especialista no; anónimo tampoco
+  await asUser(uRecep);
+  await expectErr("eliminar: recepción NO puede borrar citas", "select delete_appointments($1)", [[D3.id]], "forbidden");
+  await expectErr("eliminar: recepción NO puede borrar ventas", "select delete_sales($1, false)", [[sale1.sale_id]], "forbidden");
+  await expectErr("eliminar: recepción NO puede borrar clientes", "select delete_clients($1, true)", [[D3.client_id]], "forbidden");
+  await expectErr("eliminar: recepción NO puede ver la vista previa", "select describe_deletion('appointments', $1)", [[D3.id]], "forbidden");
+  await asUser(uSpec);
+  await expectErr("eliminar: el especialista NO puede borrar citas", "select delete_appointments($1)", [[D3.id]], "forbidden");
+  await expectErr("eliminar: el especialista NO puede limpiar notificaciones", "select clear_notifications(true)", [], "forbidden");
+  await asAnon();
+  await expectErr("eliminar: anon NO puede borrar", "select public.delete_appointments('{}')", [], "permission denied");
+  await expectErr("eliminar: anon NO puede limpiar notificaciones", "select public.clear_notifications(true)", [], "permission denied");
+  await asAdmin();
+  check("eliminar: las citas siguen ahí tras los intentos sin permiso", (await exists("appointments", D3.id)) && (await exists("appointments", D1.id)));
+
+  // Gerencia: vista previa y borrado de una solicitud sin venta
+  await asUser(uManager);
+  const dv = (await q("select describe_deletion('appointments', $1) r", [[D1.id]])).rows[0].r;
+  check("vista previa de una cita completada: 1 cita, 1 venta, 1 pago", dv.appointments === 1 && dv.sales === 1 && dv.payments === 1 && Number(dv.paid_total) === 100, JSON.stringify(dv));
+  const dvSolo = (await q("select describe_deletion('appointments', $1) r", [[D3.id]])).rows[0].r;
+  check("vista previa de una solicitud sin venta: nada de dinero", dvSolo.appointments === 1 && dvSolo.sales === 0 && dvSolo.payments === 0);
+  await expectErr("eliminar: sin seleccionar nada se rechaza", "select delete_appointments('{}')", [], "nothing_selected");
+  const del3 = (await q("select delete_appointments($1) r", [[D3.id]])).rows[0].r;
+  check("eliminar una solicitud: se va sola y las demás citas siguen", del3.appointments === 1 && !(await exists("appointments", D3.id)) && (await exists("appointments", D2.id)));
+
+  // Cita completada con venta y pago: se llevan todo
+  const del1 = (await q("select delete_appointments($1) r", [[D1.id]])).rows[0].r;
+  check("eliminar una cita completada: se borran también su venta y su pago", del1.appointments === 1 && del1.sales === 1 && del1.payments === 1 && !(await exists("appointments", D1.id)) && !(await exists("sales", sale1.sale_id)) && (await q("select count(*) from payments where sale_id=$1", [sale1.sale_id])).rows[0].count === "0");
+  check("eliminar: queda en la auditoría con los datos que tenía", Number((await q("select count(*) from audit_logs where entity in ('appointments','sales','payments') and action='delete'")).rows[0].count) >= 3);
+
+  // Ventas: dejando la cita o llevándosela
+  await asAdmin();
+  const D4 = await mkAppt("Cuatro", "8295553004", "en_servicio", 930), D5 = await mkAppt("Cinco", "8295553005", "en_servicio", 940);
+  await asUser(uManager);
+  const sale4 = (await q("select complete_appointment($1) r", [D4.id])).rows[0].r, sale5 = (await q("select complete_appointment($1) r", [D5.id])).rows[0].r;
+  await q("select record_sale_payment($1, 50, 'efectivo')", [sale4.sale_id]);
+  const dvs = (await q("select describe_deletion('sales', $1) r", [[sale4.sale_id, sale5.sale_id]])).rows[0].r;
+  check("vista previa de ventas: cuenta pagos y citas ligadas", dvs.sales === 2 && dvs.payments === 1 && dvs.linked_appointments === 2, JSON.stringify(dvs));
+  const ds4 = (await q("select delete_sales($1, false) r", [[sale4.sale_id]])).rows[0].r;
+  const a4 = (await q("select status, final_total, completed_at from appointments where id=$1", [D4.id])).rows[0];
+  check("eliminar una venta dejando la cita: la cita vuelve a «confirmada» para cobrarla de nuevo", ds4.sales === 1 && ds4.reopened === 1 && a4.status === "confirmado" && a4.final_total === null && a4.completed_at === null && !(await exists("sales", sale4.sale_id)));
+  check("eliminar una venta: se van también sus pagos", ds4.payments === 1 && (await q("select count(*) from payments where sale_id=$1", [sale4.sale_id])).rows[0].count === "0");
+  const ds5 = (await q("select delete_sales($1, true) r", [[sale5.sale_id]])).rows[0].r;
+  check("eliminar una venta junto con su cita: se van las dos", ds5.sales === 1 && ds5.appointments === 1 && !(await exists("appointments", D5.id)) && !(await exists("sales", sale5.sale_id)));
+  const qs2 = (await q("select create_quick_sale($1::jsonb) r", [JSON.stringify({ items: [{ description: "Venta suelta", quantity: 1, unit_price: 100 }], payments: [{ method: "efectivo", amount: 100 }] })])).rows[0].r;
+  const dsq = (await q("select delete_sales($1, false) r", [[qs2.sale_id]])).rows[0].r;
+  check("eliminar una venta de mostrador (sin cita): se borra con su pago", dsq.sales === 1 && dsq.payments === 1 && dsq.appointments === 0 && !(await exists("sales", qs2.sale_id)));
+
+  // Clientes: sin historial se borran; con historial solo si se pide
+  await asAdmin();
+  const cClean = (await q("insert into clients (first_name, last_name, phone) values ('Sin','Historial','8295553010') returning id")).rows[0].id;
+  const D6 = await mkAppt("Seis", "8295553006", "en_servicio", 950);
+  await asUser(uManager);
+  const sale6 = (await q("select complete_appointment($1) r", [D6.id])).rows[0].r;
+  await q("select record_sale_payment($1, 70, 'efectivo')", [sale6.sale_id]);
+  const dvc = (await q("select describe_deletion('clients', $1) r", [[cClean, D6.client_id]])).rows[0].r;
+  check("vista previa de clientes: separa los que tienen historial", dvc.clients_clean === 1 && dvc.clients_with_history === 1 && dvc.appointments === 1 && dvc.sales === 1 && dvc.payments === 1, JSON.stringify(dvc));
+  const dc1 = (await q("select delete_clients($1, false) r", [[cClean, D6.client_id]])).rows[0].r;
+  check("eliminar clientes sin pedir el historial: borra al que no tiene y conserva (y avisa de) al que sí", dc1.clients === 1 && dc1.skipped === 1 && !(await exists("clients", cClean)) && (await exists("clients", D6.client_id)) && (await exists("appointments", D6.id)));
+  const dc2 = (await q("select delete_clients($1, true) r", [[D6.client_id]])).rows[0].r;
+  check("eliminar un cliente CON su historial: se van sus citas, ventas y pagos", dc2.clients === 1 && dc2.appointments === 1 && dc2.sales === 1 && dc2.payments === 1 && !(await exists("clients", D6.client_id)) && !(await exists("appointments", D6.id)) && !(await exists("sales", sale6.sale_id)));
+
+  // Notificaciones
+  await asAdmin();
+  await q("insert into notifications (type, title, read_at) values ('prueba', 'leída', now()), ('prueba', 'sin leer', null)");
+  await asUser(uRecep);
+  const cn1 = (await q("select clear_notifications(true) n")).rows[0].n;
+  const left1 = (await q("select count(*) from notifications where type='prueba'")).rows[0].count;
+  check("notificaciones: «borrar leídas» deja las que faltan por leer", cn1 >= 1 && left1 === "1");
+  const cn2 = (await q("select clear_notifications(false) n")).rows[0].n;
+  check("notificaciones: «borrar todas» las limpia (recepción puede)", cn2 >= 1 && (await q("select count(*) from notifications")).rows[0].count === "0");
+  await asAdmin();
 
 
   /* ───────── cumpleaños del personal ───────── */

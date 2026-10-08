@@ -5,13 +5,14 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { Button, ButtonAnchor, ButtonLink } from "@/components/ui/Button";
 import { WhatsAppIcon } from "@/components/ui/Icons";
-import { deleteAppointment, syncCalendarNow } from "@/lib/actions/admin/appointments";
+import { syncCalendarNow } from "@/lib/actions/admin/appointments";
 import type { ApptRow } from "@/lib/data/appointments";
 import { apptTotal } from "@/lib/data/appointment-math";
 import { can, allowed } from "@/lib/permissions";
 import { SOURCE_LABEL } from "@/lib/domain/status";
 import { duration, fmtDate, fmtTime, money } from "@/lib/format";
 import { useAdmin } from "../AdminContext";
+import { DeleteDialog } from "../DeleteDialog";
 import { ConfirmDialog, Modal, useToast } from "../overlay";
 import { StatusBadge } from "../primitives";
 import u from "../ui.module.css";
@@ -27,7 +28,8 @@ export function AppointmentModal({ appt, onClose }: { appt: ApptRow | null; onCl
   const act = useApptActions(onClose);
   const [pay, setPay] = useState(false);
   const [edit, setEdit] = useState(false);
-  const [confirm, setConfirm] = useState<null | "cancelado" | "no_asistio" | "borrar">(null);
+  const [confirm, setConfirm] = useState<null | "cancelado" | "no_asistio">(null);
+  const [del, setDel] = useState(false);
   const [resched, setResched] = useState(false);
   const [when, setWhen] = useState("");
   const [emp, setEmp] = useState("");
@@ -133,7 +135,7 @@ export function AppointmentModal({ appt, onClose }: { appt: ApptRow | null; onCl
           {manage && (
             <div className={u.rowActions} style={{ borderTop: "var(--border)", paddingTop: 12 }}>
               <Button size="sm" variant="secondary" disabled={busy} onClick={() => start(async () => { const r = await syncCalendarNow(appt.id); toast(r.ok ? "Sincronizada con Google Calendar" : r.error, r.ok ? "ok" : "err"); })}>Sincronizar con Google Calendar</Button>
-              {allowed(role, "deleteRecords") && appt.status !== "completado" && <Button size="sm" variant="danger" onClick={() => setConfirm("borrar")}>Eliminar definitivamente</Button>}
+              {allowed(role, "deleteRecords") && <Button size="sm" variant="danger" onClick={() => setDel(true)}>Eliminar definitivamente</Button>}
             </div>
           )}
         </div>
@@ -147,9 +149,9 @@ export function AppointmentModal({ appt, onClose }: { appt: ApptRow | null; onCl
         text={confirm === "cancelado" ? "El horario quedará libre y se actualizará en el calendario. Podrás reabrirla después." : confirm === "no_asistio" ? "Se registrará que el cliente no llegó y el horario quedará libre." : "Se borrará por completo con su historial. Esta acción no se puede deshacer."}
         confirmLabel={confirm === "cancelado" ? "Cancelar cita" : confirm === "no_asistio" ? "Marcar" : "Eliminar"} onClose={() => setConfirm(null)}
         onConfirm={() => {
-          if (confirm === "borrar") start(async () => { const r = await deleteAppointment(appt.id); toast(r.ok ? "Cita eliminada" : r.error, r.ok ? "ok" : "err"); if (r.ok) act.refresh(); });
-          else if (confirm) act.setStatus(appt.id, confirm, confirm === "cancelado" ? "Cita cancelada" : "Marcada como no asistió");
+          if (confirm) act.setStatus(appt.id, confirm, confirm === "cancelado" ? "Cita cancelada" : "Marcada como no asistió");
         }} />
+      {del && <DeleteDialog kind="appointments" ids={[appt.id]} title={["solicitud", "contactando", "contactado"].includes(appt.status) ? "¿Eliminar la solicitud?" : "¿Eliminar la cita?"} onClose={() => setDel(false)} onDone={() => { setDel(false); onClose(); act.refresh(); }} />}
     </>
   );
 }

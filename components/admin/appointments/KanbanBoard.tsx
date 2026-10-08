@@ -13,6 +13,7 @@ import { fmtTime, money } from "@/lib/format";
 import { allowed } from "@/lib/permissions";
 import type { AppointmentStatus } from "@/types/domain";
 import { useAdmin } from "../AdminContext";
+import { DeleteDialog } from "../DeleteDialog";
 import { Modal, useToast } from "../overlay";
 import { AppointmentModal } from "./AppointmentModal";
 import { EditAppointmentModal } from "./EditAppointmentModal";
@@ -32,10 +33,10 @@ function remaining(iso: string, status: AppointmentStatus, now: number) {
 
 type CardProps = {
   a: ApptRow; overlay?: boolean; own: boolean;
-  onOpen: () => void; onPay: () => void; onEdit: () => void; onStep: (to: AppointmentStatus) => void;
+  onOpen: () => void; onPay: () => void; onEdit: () => void; onDelete: () => void; onStep: (to: AppointmentStatus) => void;
 };
 
-function Card({ a, overlay, own, onOpen, onPay, onEdit, onStep }: CardProps) {
+function Card({ a, overlay, own, onOpen, onPay, onEdit, onDelete, onStep }: CardProps) {
   const { role, templates, business } = useAdmin();
   const movable = role !== "specialist" || own;
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: a.id, data: { status: a.status }, disabled: !movable });
@@ -45,6 +46,7 @@ function Card({ a, overlay, own, onOpen, onPay, onEdit, onStep }: CardProps) {
   const manage = allowed(role, "manageAppointments");
   const charge = allowed(role, "charge");
   const closed = ["cancelado", "no_asistio"].includes(a.status);
+  const canDelete = allowed(role, "deleteRecords");
   return (
     <article ref={setNodeRef} className={`${s.card} ${overlay ? s.drag : ""} ${isDragging ? s.dragging : ""} ${closed ? s.closedCard : ""}`} aria-label={`${a.client.first_name} ${fmtTime(a.start_time)}`}>
       <div className={s.cardTop}>
@@ -68,6 +70,7 @@ function Card({ a, overlay, own, onOpen, onPay, onEdit, onStep }: CardProps) {
         {charge && ["confirmado", "en_espera", "en_servicio"].includes(a.status) && <Button size="sm" variant="soft" onClick={onPay}>Cobrar</Button>}
         {a.status === "en_servicio" && canMove(role, own, a.status, "completado") && <Button size="sm" onClick={() => onStep("completado")}>Completar</Button>}
         {manage && closed && <Button size="sm" variant="secondary" onClick={() => onStep("solicitud")}>Reabrir</Button>}
+        {canDelete && !overlay && <Button size="sm" variant="danger" onClick={onDelete} aria-label={`Eliminar la ${["solicitud", "contactando", "contactado"].includes(a.status) ? "solicitud" : "cita"} de ${a.client.first_name}`}>Eliminar</Button>}
       </div>
     </article>
   );
@@ -95,6 +98,7 @@ export function KanbanBoard({ initial }: { initial: ApptRow[] }) {
   const [open, setOpen] = useState<string | null>(null);
   const [pay, setPay] = useState<string | null>(null);
   const [edit, setEdit] = useState<string | null>(null);
+  const [del, setDel] = useState<string | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const [confirmDrop, setConfirmDrop] = useState<Pending>(null);
   const [completeDrop, setCompleteDrop] = useState<string | null>(null);
@@ -141,7 +145,7 @@ export function KanbanBoard({ initial }: { initial: ApptRow[] }) {
   const dragging = items.find((i) => i.id === dragId);
   const noop = () => {};
   const cardFor = (a: ApptRow) => (
-    <Card key={a.id} a={a} own={owns(a)} onOpen={() => setOpen(a.id)} onPay={() => setPay(a.id)} onEdit={() => setEdit(a.id)} onStep={(to) => request(a, to)} />
+    <Card key={a.id} a={a} own={owns(a)} onOpen={() => setOpen(a.id)} onPay={() => setPay(a.id)} onEdit={() => setEdit(a.id)} onDelete={() => setDel(a.id)} onStep={(to) => request(a, to)} />
   );
 
   return (
@@ -152,10 +156,11 @@ export function KanbanBoard({ initial }: { initial: ApptRow[] }) {
             <Column key={c} status={c} items={byStatus[c].length} muted={BOARD_CLOSED_COLUMNS.includes(c)}>{byStatus[c].map(cardFor)}</Column>
           ))}
         </div>
-        <DragOverlay>{dragging && <Card a={dragging} overlay own={owns(dragging)} onOpen={noop} onPay={noop} onEdit={noop} onStep={noop} />}</DragOverlay>
+        <DragOverlay>{dragging && <Card a={dragging} overlay own={owns(dragging)} onOpen={noop} onPay={noop} onEdit={noop} onDelete={noop} onStep={noop} />}</DragOverlay>
       </DndContext>
 
       <AppointmentModal appt={openAppt} onClose={() => setOpen(null)} />
+      {del && <DeleteDialog kind="appointments" ids={[del]} title={["solicitud", "contactando", "contactado"].includes(items.find((i) => i.id === del)?.status ?? "") ? "¿Eliminar la solicitud?" : "¿Eliminar la cita?"} onClose={() => setDel(null)} onDone={() => router.refresh()} />}
       {payAppt && <PaymentModal appt={payAppt} onClose={() => setPay(null)} onDone={() => router.refresh()} completeByDefault={payAppt.status !== "confirmado"} />}
       {editAppt && <EditAppointmentModal appt={editAppt} onClose={() => setEdit(null)} onSaved={() => router.refresh()} />}
 

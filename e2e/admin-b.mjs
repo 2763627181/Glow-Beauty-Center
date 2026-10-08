@@ -233,7 +233,7 @@ await step("Eliminar: bloqueado con historial; permitido sin historial", async (
   await page.goto(`${BASE}/admin/clients/${id}`);
   await page.getByRole("button", { name: "Eliminar", exact: true }).click();
   await dialog().getByRole("button", { name: "Eliminar" }).click();
-  await expectVisible(toast("Cliente eliminado"), "toast", 12000);
+  await expectVisible(toast("Se eliminó: 1 cliente"), "toast", 12000);
   assert((await q(`select count(*)::int c from clients where id=$1`, [id]))[0].c === 0, "debe borrarse");
 });
 

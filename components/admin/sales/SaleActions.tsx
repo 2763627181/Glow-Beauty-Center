@@ -7,6 +7,7 @@ import { addSalePayment, updateSaleNotes, voidSale } from "@/lib/actions/admin/a
 import { money } from "@/lib/format";
 import { allowed } from "@/lib/permissions";
 import { useAdmin } from "../AdminContext";
+import { DeleteDialog } from "../DeleteDialog";
 import { Alert } from "../primitives";
 import { Modal, useToast } from "../overlay";
 import u from "../ui.module.css";
@@ -19,6 +20,7 @@ export function SaleActions({ saleId, pending, voided, notes }: { saleId: string
   const toast = useToast();
   const [busy, start] = useTransition();
   const [modal, setModal] = useState<null | "pay" | "void" | "notes">(null);
+  const [del, setDel] = useState(false);
   const [amount, setAmount] = useState(String(pending));
   const [method, setMethod] = useState(paymentMethods[0].key);
   const [ref, setRef] = useState("");
@@ -41,8 +43,10 @@ export function SaleActions({ saleId, pending, voided, notes }: { saleId: string
         {!voided && pending > 0 && allowed(role, "charge") && <Button size="sm" onClick={() => open("pay")}>Registrar pago ({money(pending)})</Button>}
         {allowed(role, "voidOrRefund") && <Button size="sm" variant="secondary" onClick={() => open("notes")}>Editar nota</Button>}
         {!voided && allowed(role, "voidOrRefund") && <Button size="sm" variant="danger" onClick={() => open("void")}>Anular venta</Button>}
+        {allowed(role, "deleteRecords") && <Button size="sm" variant="danger" onClick={() => setDel(true)}>Eliminar venta</Button>}
         <PrintButton />
       </div>
+      {del && <DeleteDialog kind="sales" ids={[saleId]} title="¿Eliminar esta venta?" onClose={() => setDel(false)} onDone={() => router.push("/admin/sales")} />}
 
       <Modal open={modal === "pay"} onClose={() => setModal(null)} title="Registrar pago">
         <div className={u.grid}>
