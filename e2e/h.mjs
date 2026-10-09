@@ -38,6 +38,21 @@ export async function login(page, email, password = PASSWORD) {
   await page.waitForURL((u) => !u.pathname.endsWith("/login"), { timeout: 20000 });
 }
 
+/* La Caja exige un turno abierto para cobrar en efectivo: las suites que cobran abren uno propio ('E2E suite', fondo 0) y lo borran al terminar.
+   Si la base aún no tiene la actualización de la caja, no hacen nada. */
+export async function suiteCashOpen(q) {
+  if (!(await q(`select to_regclass('public.cash_sessions') t`))[0].t) return;
+  await q(`insert into cash_sessions (opening_amount, opening_note) select 0, 'E2E suite' where not exists (select 1 from cash_sessions where closed_at is null)`);
+}
+export async function suiteCashDrop(q) {
+  if (!(await q(`select to_regclass('public.cash_sessions') t`))[0].t) return;
+  const ids = (await q(`select id from cash_sessions where opening_note = 'E2E suite'`)).map((r) => r.id);
+  if (!ids.length) return;
+  await q(`delete from cash_movements where session_id = any($1)`, [ids]);
+  await q(`delete from cash_sessions where id = any($1)`, [ids]);
+  await q(`delete from audit_logs where entity_id = any($1::uuid[])`, [ids]);
+}
+
 const results = [];
 let current = null;
 /** Página por defecto para las capturas de pantalla de los pasos que fallan. */

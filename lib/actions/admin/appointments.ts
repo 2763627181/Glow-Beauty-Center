@@ -112,6 +112,8 @@ export async function updateAppointment(id: string, input: UpdateAppointmentInpu
 const paySchema = z.object({
   amount: z.number().positive("Escribe un monto mayor a 0"), method: z.string().regex(/^[a-z0-9_]{2,30}$/, "Método no válido"),
   reference: z.string().max(80).optional(), allowOverpay: z.boolean().optional(),
+  /** Efectivo que entregó el cliente (solo pagos en efectivo; el vuelto es esto menos `amount`). Se omite si la caja aún no está instalada. */
+  tendered: z.number().positive("El efectivo recibido no es válido").max(10_000_000).optional(),
 });
 export type PayInput = z.input<typeof paySchema>;
 
@@ -123,6 +125,7 @@ export async function addPayment(appointmentId: string, input: PayInput): Promis
   const sb = await createClient();
   const { data, error } = await sb.rpc("record_payment", {
     p_appointment: appointmentId, p_amount: p.data.amount, p_method: p.data.method, p_reference: p.data.reference ?? null, p_allow_overpay: p.data.allowOverpay ?? false,
+    ...(p.data.tendered != null && { p_tendered: p.data.tendered }),
   });
   if (error) return fail(error.message);
   touch();
@@ -136,6 +139,7 @@ export async function addSalePayment(saleId: string, input: PayInput): Promise<A
   const sb = await createClient();
   const { data, error } = await sb.rpc("record_sale_payment", {
     p_sale: saleId, p_amount: p.data.amount, p_method: p.data.method, p_reference: p.data.reference ?? null, p_allow_overpay: p.data.allowOverpay ?? false,
+    ...(p.data.tendered != null && { p_tendered: p.data.tendered }),
   });
   if (error) return fail(error.message);
   refresh();
@@ -174,7 +178,7 @@ const quickSchema = z.object({
   client_id: z.uuid().nullish(), employee_id: z.uuid().nullish(), discount: z.number().min(0).optional(), tip: z.number().min(0).optional(),
   notes: z.string().max(500).optional(), allow_overpay: z.boolean().optional(),
   items: z.array(z.object({ description: z.string().trim().min(1, "Cada artículo necesita un nombre"), quantity: z.number().int().min(1), unit_price: z.number().min(0, "El precio no puede ser negativo"), service_id: z.uuid().nullish() })).min(1, "Agrega al menos un artículo"),
-  payments: z.array(paySchema.pick({ amount: true, method: true, reference: true })).optional(),
+  payments: z.array(paySchema.pick({ amount: true, method: true, reference: true, tendered: true })).optional(),
 });
 export type QuickSaleInput = z.input<typeof quickSchema>;
 

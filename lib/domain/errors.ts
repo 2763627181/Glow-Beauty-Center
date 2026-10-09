@@ -37,6 +37,23 @@ export const ERROR_MESSAGES: Record<string, string> = {
   payroll_paid: "Esa nómina ya está pagada. Reábrela si necesitas corregirla.",
   payroll_period_locked: "El período de una nómina no se puede cambiar; elimínala y crea otra.",
   payment_not_refundable: "Ese pago no se puede reembolsar.",
+  cash_already_open: "Ya hay una caja abierta.",
+  cash_sessions_one_open: "Ya hay una caja abierta.",
+  cash_not_open: "No hay una caja abierta. Ábrela primero.",
+  cash_session_closed: "Esa caja ya está cerrada y no se puede modificar.",
+  cash_session_not_found: "Esa caja no existe.",
+  cash_not_latest: "Solo se puede reabrir el último cierre.",
+  cash_movement_not_found: "Ese movimiento no existe.",
+  cash_movement_voided: "Ese movimiento ya está anulado.",
+  cash_movement_locked: "Un movimiento de caja no se puede editar; anúlalo y regístralo de nuevo.",
+  insufficient_cash: "No hay suficiente efectivo en la caja para eso.",
+  invalid_category: "Esa categoría no corresponde al tipo de movimiento.",
+  invalid_movement_kind: "El movimiento debe ser una entrada o una salida.",
+  description_required: "Escribe en qué se usó o de dónde viene el dinero.",
+  employee_required: "Elige a la especialista.",
+  difference_note_required: "Hay diferencia entre lo esperado y lo contado: escribe una nota que la explique.",
+  tendered_not_cash: "El efectivo recibido solo aplica a pagos en efectivo.",
+  tendered_too_low: "El efectivo recibido no puede ser menor que lo cobrado.",
 };
 
 export function friendlyError(message: string | undefined | null, fallback = "No se pudo completar la acción. Intenta de nuevo."): string {

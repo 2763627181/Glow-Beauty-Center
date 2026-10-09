@@ -146,13 +146,23 @@ export async function saveSetting<K extends keyof typeof schemas>(key: K, value:
 /* ───────── Métodos de pago ───────── */
 const slugKey = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 30);
 
-export async function savePaymentMethod(key: string | null, input: { label: string; active: boolean }): Promise<ActionResult> {
+export async function savePaymentMethod(key: string | null, input: { label: string; active: boolean; isCash?: boolean }): Promise<ActionResult> {
   await requireAccess("settings");
-  const p = z.object({ label: z.string().trim().min(1, "Escribe el nombre del método").max(40), active: z.boolean() }).safeParse(input);
+  const p = z.object({ label: z.string().trim().min(1, "Escribe el nombre del método").max(40), active: z.boolean(), isCash: z.boolean().optional() }).safeParse(input);
   if (!p.success) return { ok: false, error: p.error.issues[0].message };
   const sb = await createClient();
+  const { isCash, ...base } = p.data;
+  const fields = isCash === undefined ? base : { ...base, is_cash: isCash };
   if (key) {
-    const { error } = await sb.from("payment_methods").update(p.data).eq("key", key);
+    if (isCash !== undefined) {
+      // Cambiar si un método es efectivo con la caja abierta descuadraría el turno en curso
+      const { data: cur } = await sb.from("payment_methods").select("is_cash").eq("key", key).maybeSingle();
+      if (cur && !!cur.is_cash !== isCash) {
+        const { data: open } = await sb.from("cash_sessions").select("id").is("closed_at", null).maybeSingle();
+        if (open) return { ok: false, error: "Cierra la caja antes de cambiar si este método es efectivo." };
+      }
+    }
+    const { error } = await sb.from("payment_methods").update(fields).eq("key", key);
     if (error) return { ok: false, error: "No se pudo guardar." };
   } else {
     let k = slugKey(p.data.label);
@@ -160,7 +170,7 @@ export async function savePaymentMethod(key: string | null, input: { label: stri
     const { data: ex } = await sb.from("payment_methods").select("key").eq("key", k).maybeSingle();
     if (ex) k = `${k.slice(0, 25)}_${Math.random().toString(36).slice(2, 5)}`;
     const { data: last } = await sb.from("payment_methods").select("display_order").order("display_order", { ascending: false }).limit(1).maybeSingle();
-    const { error } = await sb.from("payment_methods").insert({ key: k, ...p.data, display_order: (last?.display_order ?? 0) + 1 });
+    const { error } = await sb.from("payment_methods").insert({ key: k, ...fields, display_order: (last?.display_order ?? 0) + 1 });
     if (error) return { ok: false, error: "No se pudo crear." };
   }
   revalidatePath("/admin", "layout");

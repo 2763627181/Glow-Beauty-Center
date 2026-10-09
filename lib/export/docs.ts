@@ -7,6 +7,7 @@ import { groupLines } from "../domain/serviceLines.ts";
 import type { ApptRow } from "../data/appointments.ts";
 import type { PayrollLine, PayrollRun } from "../data/payroll.ts";
 import { apptSubtotal, apptTotal } from "../data/appointment-math.ts";
+import { buildTimeline, changeOf, MOVE_LABEL, splitProduction, type CashReport, type TimelineRow } from "../domain/cash.ts";
 import { periodLabel } from "../domain/payroll.ts";
 import { summarize, type ApptIn, type Row, type SaleIn, type SummaryOpts } from "../domain/reports.ts";
 import { SOURCE_LABEL, STATUS_META } from "../domain/status.ts";
@@ -419,5 +420,61 @@ export function paySlipDoc(run: PayrollRun, line: PayrollLine, ctx: Ctx): Export
       { name: "Servicios", title: "Servicios realizados", subtitle: "Ventas incluidas en la comisión", columns: detailCols(false), rows: detail, totals: { label: "Total" }, emptyText: "No hubo ventas en el período." },
     ],
     csv: "all", pdfMaxRows: 60,
+  };
+}
+
+/* ═════════════════════════════ CAJA (cierre de turno) ═════════════════════════════ */
+export function cashDoc(r: CashReport, ctx: Ctx): ExportDoc {
+  const s = r.session, t = r.totals, closed = s.closed_at != null;
+  const aside = round2(r.methods.filter((m) => !m.is_cash).reduce((sum, m) => sum + m.total - m.refunded, 0));
+  const dt = (iso: string) => `${fmtDate(iso, { day: "numeric", month: "short", year: "numeric" })}, ${fmtTime(iso)}`;
+  const summary: R[] = [
+    { c: "Fondo inicial", m: t.opening },
+    { c: "Efectivo cobrado (sin el vuelto)", m: t.cash_in },
+    { c: "Entradas de efectivo", m: t.entradas },
+    { c: "Efectivo reembolsado", m: -t.cash_refunds },
+    { c: "Salidas de efectivo", m: -t.salidas },
+    { c: "Efectivo que debía haber", m: t.expected },
+    ...(closed ? [{ c: "Efectivo contado", m: s.counted_cash }, { c: s.difference == null || s.difference === 0 ? "Diferencia" : s.difference < 0 ? "Diferencia (faltante)" : "Diferencia (sobrante)", m: s.difference }] : []),
+  ];
+  const methods: R[] = r.methods.map((m) => ({ metodo: m.label, tipo: m.is_cash ? "Entra a la caja" : "Cobrado aparte", n: m.count, total: m.total, ref: m.refunded }));
+  const flow: R[] = buildTimeline(r).filter((x) => x.type !== "movimiento").map((x) => {
+    const p = (x as Extract<TimelineRow, { payment: unknown }>).payment;
+    return {
+      hora: x.at, tipo: x.type === "cobro" ? "Cobro" : "Reembolso", venta: p.sale_number ?? (p.appointment_id ? "Cita" : ""), cliente: p.client ?? "", metodo: p.label,
+      lugar: p.is_cash ? "Efectivo" : "Cobrado aparte", monto: p.amount, recibido: p.tendered ?? null, vuelto: p.tendered != null ? changeOf(p) : null, ref: p.reference ?? "", por: p.by ?? "",
+    };
+  }).reverse();
+  const moves: R[] = r.movements.map((m) => ({
+    hora: m.at, tipo: m.kind === "entrada" ? "Entrada" : "Salida", cat: MOVE_LABEL[m.category], emp: m.employee_name ?? "", det: m.description ?? "", monto: m.amount,
+    estado: m.voided_at ? "Anulado" : "Vigente", motivo: m.void_reason ?? "", por: m.by ?? "",
+  }));
+  const prod: R[] = r.production.map((p) => {
+    const x = splitProduction(p);
+    return { emp: p.name, serv: p.services, prod: p.production, salon: x.salon, ella: x.hers, ent: x.paidOut, falta: p.employee_id ? x.toPay : null, nota: x.noPct > 0 ? "Falta el porcentaje en la ficha o no tiene especialista" : "" };
+  });
+  return {
+    fileBase: `glow-${s.number.toLowerCase()}`, title: `Cierre de caja ${s.number}`, subtitle: closed ? "Caja cerrada" : "Caja abierta (reporte parcial)",
+    business: ctx.business, generatedAt: ctx.generatedAt,
+    filters: [
+      ["Abierta", `${dt(s.opened_at)}${s.opened_by ? ` · ${s.opened_by}` : ""}`],
+      ["Cerrada", closed ? `${dt(s.closed_at!)}${s.closed_by ? ` · ${s.closed_by}` : ""}` : "Sigue abierta"],
+      ...(s.closing_note ? [["Nota de cierre", s.closing_note] as [string, string]] : []), ...(s.opening_note ? [["Nota de apertura", s.opening_note] as [string, string]] : []),
+    ],
+    kpis: [
+      { label: "Debía haber", value: t.expected, kind: "money" },
+      ...(closed ? [{ label: "Se contó", value: s.counted_cash ?? 0, kind: "money" as const }, { label: "Diferencia", value: s.difference ?? 0, kind: "money" as const }] : []),
+      { label: "Efectivo cobrado", value: t.cash_in, kind: "money" }, { label: "Tarjeta y transferencia (aparte)", value: aside, kind: "money" },
+      { label: "Entradas", value: t.entradas, kind: "money" }, { label: "Salidas", value: t.salidas, kind: "money" },
+      { label: "Ventas del turno", value: r.sales.total, kind: "money" }, { label: "Propinas", value: r.sales.tips, kind: "money" },
+    ],
+    sections: [
+      { name: "Cuadre", title: "Cuadre del efectivo", subtitle: "Fondo + cobrado + entradas − reembolsos − salidas", columns: [col("c", "Concepto", { width: 36 }), col("m", "Monto", { kind: "money" })], rows: summary },
+      { name: "Por método", title: "Cobrado por método de pago", subtitle: "Tarjeta y transferencia se cobran aparte: aquí solo se registran y no entran a la caja", columns: [col("metodo", "Método", { width: 22 }), col("tipo", "Tipo", { width: 18 }), col("n", "Cobros", { kind: "int", total: "sum" }), col("total", "Cobrado", { kind: "money", total: "sum" }), col("ref", "Reembolsado", { kind: "money", total: "sum" })], rows: methods, totals: { label: "Total" }, emptyText: "No hubo cobros en este turno." },
+      { name: "Cobros", title: "Cobros y reembolsos", columns: [col("hora", "Hora", { kind: "datetime" }), col("tipo", "Tipo"), col("venta", "Venta"), col("cliente", "Cliente", { width: 24 }), col("metodo", "Método"), col("lugar", "Cómo se cobró"), col("monto", "Monto", { kind: "money" }), col("recibido", "Recibido", { kind: "money" }), col("vuelto", "Vuelto", { kind: "money" }), col("ref", "Referencia", { pdf: false }), col("por", "Cobró", { pdf: false })], rows: flow, emptyText: "No hubo cobros en este turno." },
+      { name: "Entradas y salidas", title: "Entradas y salidas de efectivo", columns: [col("hora", "Hora", { kind: "datetime" }), col("tipo", "Tipo"), col("cat", "Categoría", { width: 26 }), col("emp", "Especialista", { width: 22 }), col("det", "Detalle", { width: 30 }), col("monto", "Monto", { kind: "money" }), col("estado", "Estado"), col("motivo", "Motivo de anulación", { pdf: false }), col("por", "Registró", { pdf: false })], rows: moves, emptyText: "No hubo entradas ni salidas de efectivo." },
+      { name: "Producción", title: "Producción por especialista", subtitle: "Paga al salón = producción − lo que se queda ella según su porcentaje", columns: [col("emp", "Especialista", { width: 26 }), col("serv", "Servicios", { kind: "int", total: "sum" }), col("prod", "Producción", { kind: "money", total: "sum" }), col("salon", "Paga al salón", { kind: "money", total: "sum" }), col("ella", "Se queda ella", { kind: "money", total: "sum" }), col("ent", "Entregado de caja", { kind: "money", total: "sum" }), col("falta", "Por entregar", { kind: "money" }), col("nota", "Nota", { width: 34, pdf: false })], rows: prod, totals: { label: "Total" }, emptyText: "No hubo ventas en este turno." },
+    ],
+    csv: "all", pdfMaxRows: 80,
   };
 }

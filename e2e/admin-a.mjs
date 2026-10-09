@@ -1,9 +1,10 @@
 import pg from "pg";
-import { BASE, assert, expectVisible, launch, login, section, setPage, step, summary } from "./h.mjs";
+import { BASE, assert, expectVisible, launch, login, section, setPage, step, summary, suiteCashDrop, suiteCashOpen } from "./h.mjs";
 
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
 await db.connect();
 const q = async (s, p) => (await db.query(s, p)).rows;
+await suiteCashOpen(q);
 const { browser, page, errors } = await launch();
 setPage(page);
 const nextDay = (n) => new Date(Date.now() + n * 864e5).toLocaleDateString("en-CA", { timeZone: "America/Santo_Domingo" });
@@ -189,10 +190,10 @@ await step("Cobrar con pago dividido (efectivo + tarjeta) y completar → genera
   await card.getByRole("button", { name: "Cobrar" }).click();
   await expectVisible(page.getByRole("heading", { name: /Cobrar · E2E/ }), "modal de cobro");
   const total = (await q(`select estimated_total from appointments where id=$1`, [apptId]))[0].estimated_total;
-  await page.getByLabel("Monto").first().fill("1000");
+  await page.getByLabel("El cliente entregó (RD$)").first().fill("1000");
   await page.getByRole("button", { name: "+ Dividir pago" }).click();
-  await page.getByLabel("Monto").nth(1).fill(String(Number(total) - 1000));
-  await page.getByLabel("Método de pago").nth(1).selectOption("tarjeta");
+  await page.getByLabel("Método").nth(1).selectOption("tarjeta");
+  await page.getByLabel("Monto cobrado (RD$)").fill(String(Number(total) - 1000));
   await page.getByRole("button", { name: /^Cobrar RD\$/ }).click();
   await expectVisible(toast("venta GBC-"), "venta", 15000);
   const [s] = await q(`select s.id, s.sale_number, s.total, s.payment_status, (select count(*) from payments where sale_id=s.id and status='pagado')::int pays from sales s where s.appointment_id=$1`, [apptId]);
@@ -203,7 +204,7 @@ await step("Completar con pago parcial deja saldo; cobrar el saldo desde la vent
   const r = (await q(`select create_booking(jsonb_build_object('first_name','Parcial','last_name','E2E','phone','8295557102','status','en_servicio','source','walk_in','start_time',$1::text,'employee_id',$2::text,'services',jsonb_build_array(jsonb_build_object('service_id',(select id from services where slug='pedicure'))))) r`, [new Date(`${DAY}T11:00:00-04:00`).toISOString(), e.id]))[0].r;
   await page.goto(BASE + "/admin/appointments/board");
   await page.locator("article", { hasText: "Parcial" }).first().getByRole("button", { name: "Cobrar" }).click();
-  await page.getByLabel("Monto").first().fill("300");
+  await page.getByLabel("El cliente entregó (RD$)").first().fill("300");
   await page.getByRole("button", { name: /^Cobrar RD\$ 300/ }).click();
   await expectVisible(toast("venta GBC-"), "venta", 15000);
   const [s] = await q(`select id, payment_status from sales where appointment_id=$1`, [r.id]);
@@ -239,6 +240,7 @@ await step("Ventas: filtros por estado, búsqueda por número y exportación CSV
 });
 
 console.log("\nLimpieza de datos de prueba…");
+await suiteCashDrop(q);
 await q(`delete from payments where sale_id in (select id from sales where appointment_id in (select a.id from appointments a join clients c on c.id=a.client_id where c.phone_normalized in ('8295557100','8295557101','8295557102')))`);
 await q(`delete from sales where appointment_id in (select a.id from appointments a join clients c on c.id=a.client_id where c.phone_normalized in ('8295557100','8295557101','8295557102'))`);
 await q(`delete from appointments where client_id in (select id from clients where phone_normalized in ('8295557100','8295557101','8295557102'))`);

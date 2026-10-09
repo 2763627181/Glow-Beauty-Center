@@ -52,7 +52,7 @@ export default async function SalePage({ params }: PageProps<"/admin/sales/[id]"
         <h2 style={{ marginTop: 16, fontSize: "1.1rem" }}>Pagos</h2>
         {(s.payments as any[]).length === 0 ? <p className={u.sub}>Sin pagos registrados.</p> : (s.payments as any[]).map((p) => (
           <div key={p.id} className={r.row}>
-            <span>{label.get(p.method) ?? p.method}{p.reference && ` · ${p.reference}`}{p.status === "reembolsado" && " (reembolsado)"} <span className={u.sub}>{fmtDate(p.paid_at, { day: "numeric", month: "short" })}</span></span>
+            <span>{label.get(p.method) ?? p.method}{p.reference && ` · ${p.reference}`}{p.status === "reembolsado" && " (reembolsado)"} <span className={u.sub}>{fmtDate(p.paid_at, { day: "numeric", month: "short" })}</span>{p.tendered != null && Number(p.tendered) > Number(p.amount) && <span className={u.sub}> · recibido {money(p.tendered)} · vuelto {money(Number(p.tendered) - Number(p.amount))}</span>}</span>
             <span style={{ display: "inline-flex", gap: 10, alignItems: "center" }}>
               {money(p.amount)}
               {!voided && p.status === "pagado" && allowed(session.role, "voidOrRefund") && <span className={r.noprint}><RefundButton paymentId={p.id} /></span>}

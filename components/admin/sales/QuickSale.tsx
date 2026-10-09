@@ -10,7 +10,8 @@ import { Alert } from "../primitives";
 import { NumInput } from "../NumInput";
 import { Modal, useToast } from "../overlay";
 import u from "../ui.module.css";
-import { newPayRow, PaymentRows, type PayRow } from "./PaymentRows";
+import { ChangeCard } from "./ChangeCard";
+import { CASH_CLOSED_MSG, newPayRow, PaymentRows, usePaymentPlan, type PayRow } from "./PaymentRows";
 
 type Line = { key: string; description: string; quantity: number; unit_price: number; service_id: string | null };
 const k = () => Math.random().toString(36).slice(2, 9);
@@ -44,11 +45,13 @@ function QuickSaleModal({ onClose }: { onClose: () => void }) {
   const [pays, setPays] = useState<PayRow[]>([newPayRow(paymentMethods[0].key)]);
   const [overpay, setOverpay] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<{ saleId: string; charged: number; change: number } | null>(null);
 
   const subtotal = useMemo(() => lines.reduce((t, l) => t + l.quantity * l.unit_price, 0), [lines]);
   const total = subtotal - (Number(discount) || 0) + (Number(tip) || 0);
-  const entered = pays.reduce((t, p) => t + (Number(p.amount) || 0), 0);
-  const over = entered > total + 0.001;
+  const plan = usePaymentPlan(pays, Math.max(Math.round(total * 100) / 100, 0));
+  const { tender } = plan;
+  const over = tender.overNonCash > 0.004;
   const set = (key: string, patch: Partial<Line>) => setLines((l) => l.map((x) => (x.key === key ? { ...x, ...patch } : x)));
 
   async function lookup() {
@@ -62,18 +65,30 @@ function QuickSaleModal({ onClose }: { onClose: () => void }) {
     if (!lines.length) return setError("Agrega al menos un artículo.");
     if (lines.some((l) => !l.description.trim() || l.quantity < 1 || l.unit_price < 0)) return setError("Revisa nombre, cantidad y precio de los artículos.");
     if ((Number(discount) || 0) > subtotal) return setError("El descuento no puede superar el subtotal.");
-    if (over && !overpay) return setError("El pago supera el total. Marca la casilla para confirmar el sobrepago.");
+    if (plan.cashBlocked) return setError(CASH_CLOSED_MSG);
+    if (over && !overpay) return setError("La tarjeta o transferencia supera el total. Marca la casilla para confirmar el sobrepago.");
+    const charged = tender.applied, change = tender.change;
     start(async () => {
       const r = await createQuickSale({
         client_id: client?.id ?? null, employee_id: emp || null, discount: Number(discount) || 0, tip: Number(tip) || 0, notes: notes || undefined, allow_overpay: overpay,
         items: lines.map((l) => ({ description: l.description.trim(), quantity: l.quantity, unit_price: l.unit_price, service_id: l.service_id })),
-        payments: pays.filter((p) => Number(p.amount) > 0).map((p) => ({ amount: Number(p.amount), method: p.method, reference: p.reference || undefined })),
+        payments: plan.items.map((p) => ({ amount: p.amount, method: p.method, reference: p.reference, tendered: p.tendered })),
       });
       if (!r.ok) return setError(r.error);
       toast(`Venta ${r.saleNumber} registrada`);
+      if (change > 0) return setDone({ saleId: r.saleId, charged, change }); // el vuelto queda a la vista hasta que se entregue
       onClose();
       router.push(`/admin/sales/${r.saleId}`);
     });
+  }
+
+  if (done) {
+    const close = () => { onClose(); router.push(`/admin/sales/${done.saleId}`); };
+    return (
+      <Modal open onClose={close} title="Venta registrada">
+        <ChangeCard charged={done.charged} change={done.change} label="Venta cobrada" onClose={close} />
+      </Modal>
+    );
   }
 
   return (
@@ -131,10 +146,10 @@ function QuickSaleModal({ onClose }: { onClose: () => void }) {
           <div style={{ display: "flex", justifyContent: "space-between" }}><span>Subtotal</span><span>{money(subtotal)}</span></div>
           <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: "1.2rem" }}><span>Total</span><span>{money(Math.max(total, 0))}</span></div>
         </div>
-        <PaymentRows rows={pays} onChange={setPays} pending={Math.max(total, 0)} />
-        {over && <label style={{ display: "flex", gap: 8, alignItems: "center" }}><input type="checkbox" checked={overpay} onChange={(e) => setOverpay(e.target.checked)} /> Confirmo el pago mayor al total ({money(entered - total)} de más)</label>}
-        {error && <Alert>{error}</Alert>}
-        <Button block onClick={submit} disabled={pending || !lines.length}>{pending ? "Registrando…" : entered > 0 ? `Registrar venta y cobrar ${money(entered)}` : "Registrar venta (sin cobro)"}</Button>
+        <PaymentRows rows={pays} onChange={setPays} pending={Math.max(total, 0)} plan={plan} />
+        {over && <label style={{ display: "flex", gap: 8, alignItems: "center" }}><input type="checkbox" checked={overpay} onChange={(e) => setOverpay(e.target.checked)} /> Confirmo el pago mayor al total ({money(tender.overNonCash)} de más)</label>}
+        {error && !(error === CASH_CLOSED_MSG && !plan.cashBlocked) && <Alert>{error}</Alert>}
+        <Button block onClick={submit} disabled={pending || !lines.length}>{pending ? "Registrando…" : tender.applied > 0 ? `Registrar venta y cobrar ${money(tender.applied)}${tender.change > 0 ? ` · vuelto ${money(tender.change)}` : ""}` : "Registrar venta (sin cobro)"}</Button>
       </div>
     </Modal>
   );

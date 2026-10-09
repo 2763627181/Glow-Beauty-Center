@@ -1,9 +1,10 @@
 import pg from "pg";
-import { BASE, assert, expectVisible, launch, login, section, setPage, step, summary, until } from "./h.mjs";
+import { BASE, assert, expectVisible, launch, login, section, setPage, step, summary, suiteCashDrop, suiteCashOpen, until } from "./h.mjs";
 
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
 await db.connect();
 const q = async (s, p) => (await db.query(s, p)).rows;
+await suiteCashOpen(q);
 const { browser, page, errors } = await launch();
 setPage(page);
 const toast = (t) => page.getByText(t, { exact: false }).first();
@@ -238,6 +239,7 @@ await step("Eliminar: bloqueado con historial; permitido sin historial", async (
 });
 
 console.log("\nLimpieza de datos de prueba…");
+await suiteCashDrop(q);
 await q(`delete from payments where sale_id in (select id from sales where notes is null and client_id is null and created_at > now() - interval '1 hour' and total=750)`);
 await q(`delete from sale_items where sale_id in (select id from sales where client_id is null and total=750)`);
 await q(`delete from sales where client_id is null and total=750`);

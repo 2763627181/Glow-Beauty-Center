@@ -80,6 +80,8 @@ Los permisos se **imponen en la base de datos** (RLS y funciones SQL), no solo e
 | Iniciar y completar un servicio | ✔ | ✔ | ✔ | solo los suyos |
 | Clientes | ✔ | ✔ | crear y editar | solo lectura de los suyos, **sin montos** |
 | Cobrar, ventas rápidas, ver ventas y cobros | ✔ | ✔ | ✔ | – |
+| **Caja** (abrir y cerrar, entradas y salidas de efectivo, producción por especialista) | ✔ | ✔ | ✔ | – |
+| Anular un movimiento de caja y reabrir un cierre | ✔ | ✔ | – | – |
 | **Nómina de pago** (crear, ajustar, pagar, volantes) | ✔ | ✔ | – | – |
 | Anular ventas, reembolsar, eliminar registros, fusionar clientes | ✔ | ✔ | – | – |
 
@@ -89,6 +91,7 @@ Los permisos se **imponen en la base de datos** (RLS y funciones SQL), no solo e
 |---|---|
 | **Servicios** | servicios (precio, duración, tiempos antes/después, comisión, foto, “desde”, destacado, consulta previa, especialistas que lo hacen), **variantes** (largo del cabello…), **complementos**, categorías (con foto), productos de venta; duplicar, ordenar, activar/ocultar. Los que ya tienen historial se archivan para no perder reportes |
 | **Especialistas** | datos, foto, biografía, comisión, sueldo base, **cumpleaños** (día y mes; ese día llega una notificación), servicios (con «Marcar todos» por categoría), horario semanal con almuerzo, ausencias/vacaciones, orden, cuenta de acceso. Una especialista nueva nace con el horario del negocio y el panel avisa si le falta horario o servicios |
+| **Caja** | turnos de caja (fondo inicial, cobros en efectivo con **vuelto**, tarjeta y transferencia que se cobran aparte, entradas y salidas de efectivo, pago a especialistas, cierre con diferencia), la producción de cada especialista con lo que **paga al salón**, y el reporte de cada cierre en Excel, PDF y CSV. Ver más abajo |
 | **Nómina** | pago por período (quincena, mes, semana o fechas propias): ventas, **comisión**, propinas, sueldo base, bonos y descuentos de cada especialista; borrador editable → pagada (queda congelada); volante de pago y nómina completa en Excel, PDF y CSV. Ver más abajo |
 | **Solicitudes, Tablero y Agenda** | todo el flujo de la cita (9 estados), arrastrar y soltar, reprogramar, varios servicios con especialistas distintos, notas, WhatsApp, citas manuales y clientes sin cita. **Sin límites desde el panel:** varias citas a la misma hora con la misma especialista, cualquier especialista para cualquier servicio y citas a horas que ya pasaron (el panel solo avisa; la agenda muestra las simultáneas una al lado de la otra). **Varias especialistas por servicio:** en *Nueva cita* y *Cliente sin cita* marcas una o varias por servicio (por ejemplo, manicure con Esther y Santa, y pedicure con otra) y puedes marcar «al mismo tiempo que el servicio anterior»; al editar, «+ Otra especialista» suma una al servicio |
 | **Clientes** | alta, edición, notas privadas, historial, desactivar, **fusionar duplicados**, exportar a Excel, PDF o CSV |
@@ -118,6 +121,22 @@ Cada exportación sale del mismo documento, así que los tres formatos siempre c
 - **PDF:** portada con indicadores, tablas con encabezado de color, estados en color, barras de porcentaje, totales y «Página X de Y». Muestra hasta 2,500 filas por tabla; el Excel y el CSV traen todo.
 - **CSV:** una tabla limpia para importar en otros programas (el reporte completo trae todas las secciones). Va con BOM para que Excel respete las tildes y protegido contra fórmulas maliciosas.
 - Los reportes y listados leen **todas** las filas del período (antes Supabase los cortaba en 1,000).
+
+## Caja
+
+*Caja* (menú; super admin, gerente y recepción). Es la pantalla del día a día: se **abre** con el efectivo que hay en la gaveta (sugiere lo que se contó al cerrar la vez anterior), se cobra, y se **cierra** contando el efectivo.
+
+- **Cobrar:** en *Por cobrar* aparecen las citas de hoy (y las que siguen en servicio) y las ventas con saldo; *Cobrar* abre el cobro, donde se pueden cambiar los servicios y sus montos, el descuento y la propina. También está *+ Nueva venta* para productos o servicios sin cita.
+- **Efectivo con vuelto:** en la fila de efectivo se escribe lo que **entregó el cliente** (o se toca un atajo: «Exacto», 1,800, 2,000…). El sistema calcula lo cobrado y el **vuelto** (servicio de 1,700 con 2,000 → cobra 1,700, devuelve 300), lo deja a la vista en una pantalla que no desaparece sola, y guarda lo recibido: se ve en el recibo y en el reporte. El vuelto no entra a la caja: solo cuenta lo cobrado.
+- **Tarjeta, transferencia y otros:** se cobran **aparte** (datáfono o banco). Aquí solo se registra cuánto fue, con qué método y su referencia o aprobación; no entran al efectivo de la caja, no tienen vuelto y salen en el reporte como «Cobrado aparte». Qué métodos son efectivo se decide en *Configuración → Métodos de pago* («Es efectivo»).
+- **Para cobrar en efectivo la caja debe estar abierta** (hay un botón para abrirla en el mismo aviso). Solo puede haber una caja abierta a la vez. Tarjeta y transferencia se pueden registrar con la caja cerrada.
+- **Efectivo cobrado con la caja cerrada** (por ejemplo, desde una pestaña vieja): no se pierde; la pantalla de Caja lo avisa («Efectivo cobrado fuera de la caja») para contarlo al abrir. No se considera lo cobrado antes de usar la caja por primera vez.
+- **Entradas y salidas de efectivo:** *Salida de efectivo* (pago a una especialista, entrega de propina, compra, gasto, retiro u otro) y *Entrada de efectivo* (dinero que se agrega). Una salida no puede ser mayor que el efectivo que hay. Gerencia puede **anular** un movimiento con motivo (el dinero vuelve); queda en Auditoría.
+- **Producción por especialista:** de lo vendido en el turno, lo que se **queda ella** y lo que **paga al salón** según su porcentaje (en su ficha: *Comisión %* y *Paga al salón %* son lo mismo visto al revés — si paga el 15 %, su comisión es 85 %). También lo ya **entregado desde la caja** y lo que **falta por entregar**, con un botón *Pagar* que prepara la salida. Los servicios sin porcentaje configurado se avisan y no se reparten.
+- **Efectivo que debe haber** = fondo inicial + efectivo cobrado + entradas − efectivo reembolsado − salidas. Un reembolso en efectivo sale de la caja del momento en que se devuelve el dinero, aunque el cobro sea de otro día; uno de tarjeta o transferencia no toca el efectivo.
+- **Cerrar caja:** se cuenta el efectivo (hay un contador de billetes y monedas) y se compara con lo que debe haber; si hay **diferencia** (faltante o sobrante) la nota es obligatoria. El cierre guarda una **foto del reporte**: lo que se cobre o anule después ya no la cambia. Gerencia puede **reabrir el último cierre** si se contó mal (con motivo; lo cobrado en efectivo mientras estuvo cerrada vuelve a contar).
+- **Reporte de cada cierre** (*Caja → Cierres anteriores → Ver*): cuadre, cobros con cliente, venta, recibido y vuelto, entradas y salidas, producción y cobrado por método; imprimir o exportar a Excel, PDF y CSV.
+- La actualización de la base de datos es `supabase/migrations/20261008000016_caja.sql` (no borra nada y se puede volver a ejecutar). Sin ella la pantalla lo avisa y el panel sigue funcionando como antes.
 
 ## Nómina de pago
 
@@ -200,14 +219,14 @@ Los genera `pg_cron` dentro de Supabase cada 5 minutos (la migración 08 lo prog
 
 | Comando | Qué hace |
 |---|---|
-| `npm test` | pruebas unitarias (motor de disponibilidad con citas simultáneas, equipos y servicios al mismo tiempo, agenda en carriles, cumpleaños, nómina, reportes, líneas de cita, búsqueda, exportaciones a Excel/PDF/CSV, evento de Calendar, validaciones) |
+| `npm test` | pruebas unitarias (motor de disponibilidad con citas simultáneas, equipos y servicios al mismo tiempo, agenda en carriles, cumpleaños, nómina, caja (vuelto, efectivo esperado, producción), reportes, líneas de cita, búsqueda, exportaciones a Excel/PDF/CSV, evento de Calendar, validaciones) |
 | `npm run typecheck` · `npm run lint` | TypeScript y ESLint |
-| `npm run verify:db` | 201 verificaciones de la base de datos (permisos por rol, ventas, pagos, citas simultáneas y tope opcional de la web, eliminar registros, panel sin límites de especialista ni de fecha, cumpleaños, horarios por defecto, nómina, autoservicio…) dentro de una transacción que se revierte: no deja datos; sirve también con la base real |
+| `npm run verify:db` | 288 verificaciones de la base de datos (permisos por rol, ventas, pagos, caja, vuelto, citas simultáneas y tope opcional de la web, eliminar registros, panel sin límites de especialista ni de fecha, cumpleaños, horarios por defecto, nómina, autoservicio…) dentro de una transacción que se revierte: no deja datos; sirve también con la base real |
 | `npm run e2e` | pruebas de extremo a extremo con un navegador real (Playwright): web pública y reserva, todo el panel, permisos por rol, escritura tecla por tecla, tiempo real, subida de fotos y descarga de las exportaciones |
 | `npm run e2e:gcal` | sincronización con Google Calendar contra un servidor simulado |
 | `npm run e2e:a11y` | escaneo de accesibilidad (axe) de la web y del panel |
 
-> Las suites nuevas `simultaneas`, `nomina` y `equipos` (`node e2e/run-all.mjs simultaneas nomina equipos`) son **seguras con la base real**: solo crean y borran filas propias («E2E …», ventas de enero de 2020) y limpian hasta su rastro en Auditoría. Las demás sí modifican datos:
+> Las suites nuevas `simultaneas`, `nomina`, `equipos` y `caja` (`node e2e/run-all.mjs simultaneas nomina equipos caja`) son **seguras con la base real**: solo crean y borran filas propias («E2E …», ventas de enero de 2020) y limpian hasta su rastro en Auditoría. Las demás sí modifican datos:
 >
 > ⚠ Las pruebas **E2E escriben y borran datos** en la base de `.env.local` y cambian (y restauran) algunos ajustes. Úsalas con un proyecto de Supabase de pruebas, no durante la operación real. Las suites antiguas (`public`, `admin-a/b/c`, `roles`…) usan las especialistas demo de la semilla, así que solo corren en un proyecto con datos demo; `simultaneas`, `nomina`, `equipos`, `exports` y `a11y` no las necesitan. La primera vez, `npx playwright install chromium`. Con la web corriendo (`npm run build && npm start`) ejecuta `npm run e2e`; crea y borra solas los usuarios `tmp-*@glow.test`.
 

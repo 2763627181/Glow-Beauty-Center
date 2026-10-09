@@ -1,5 +1,5 @@
 import pg from "pg";
-import { BASE, OUT, assert, expectVisible, launch, login, section, setPage, step, summary, until } from "./h.mjs";
+import { BASE, OUT, assert, expectVisible, launch, login, section, setPage, step, summary, suiteCashDrop, suiteCashOpen, until } from "./h.mjs";
 
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
 await db.connect();
@@ -12,11 +12,13 @@ const DAY = nextDay(wd);
 const PHONES = ["8295557401", "8295557402", "8295557403"];
 
 async function cleanup() {
+  await suiteCashDrop(q);
   await q(`delete from sales where client_id in (select id from clients where phone_normalized = any($1))`, [PHONES]);
   await q(`delete from appointments where client_id in (select id from clients where phone_normalized = any($1))`, [PHONES]);
   await q(`delete from clients where phone_normalized = any($1)`, [PHONES]);
 }
 await cleanup();
+await suiteCashOpen(q); // la caja exige un turno abierto para cobrar en efectivo
 
 const ana = (await q(`select id from employees where full_name like 'Ana%'`))[0].id;
 const carla = (await q(`select id from employees where full_name like 'Carla%'`))[0].id;

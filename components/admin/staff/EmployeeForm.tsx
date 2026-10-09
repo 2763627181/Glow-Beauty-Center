@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
 import { saveEmployee, type EmployeeInput } from "@/lib/actions/admin/staff";
 import { MAX_DAY, MONTHS } from "@/lib/domain/birthday";
+import { commissionFromSalonPct, salonPctFromCommission } from "@/lib/domain/cash";
 import { Alert } from "../primitives";
 import { ImageUpload } from "../ImageUpload";
 import { NumInput } from "../NumInput";
@@ -36,7 +37,9 @@ export function EmployeeForm({ id, initial, services }: { id: string | null; ini
         <div className={u.field}><label htmlFor="e-spec">Especialidad</label><input id="e-spec" value={f.specialty ?? ""} onChange={(e) => set({ specialty: e.target.value })} /></div>
         <div className={u.field}><label htmlFor="e-ph">Teléfono</label><input id="e-ph" type="tel" value={f.phone ?? ""} onChange={(e) => set({ phone: e.target.value })} /></div>
         <div className={u.field}><label htmlFor="e-em">Correo</label><input id="e-em" type="email" value={f.email ?? ""} onChange={(e) => set({ email: e.target.value })} /></div>
-        <div className={u.field}><label htmlFor="e-com">Comisión % (opcional)</label><NumInput id="e-com" min={0} max={100} value={f.commission_pct ?? null} onValue={(v) => set({ commission_pct: v })} /></div>
+        <div className={u.field}><label htmlFor="e-com">Comisión % (lo que se queda ella)</label><NumInput id="e-com" min={0} max={100} value={f.commission_pct ?? null} onValue={(v) => set({ commission_pct: v })} /></div>
+        <div className={u.field}><label htmlFor="e-salon">Paga al salón %</label><NumInput id="e-salon" min={0} max={100} value={salonPctFromCommission(f.commission_pct)} onValue={(v) => set({ commission_pct: commissionFromSalonPct(v) })} aria-describedby="e-salon-hint" />
+          <span id="e-salon-hint" className={u.hint}>Es lo mismo que la comisión, visto al revés: si de lo que produce paga el 15% al salón, escribe 15 y su comisión queda en 85. Se usa en la Caja y en la Nómina.</span></div>
         <div className={u.field}><label htmlFor="e-base">Sueldo base por pago, RD$ (opcional)</label><NumInput id="e-base" min={0} value={f.base_salary ?? null} emptyValue={0} onValue={(v) => set({ base_salary: v ?? 0 })} />
           <span className={u.hint}>Si cobra un monto fijo además de la comisión. Se copia a cada nómina y ahí se puede ajustar.</span></div>
         <div className={u.field}><label htmlFor="e-bd">Cumpleaños (día y mes)</label>

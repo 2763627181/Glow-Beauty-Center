@@ -6,10 +6,12 @@ export const ENTITY_LABEL: Record<string, string> = {
   clients: "Clientes", employees: "Especialistas", service_categories: "Categorías", service_variants: "Variantes", service_addons: "Complementos",
   promotions: "Promociones", gallery: "Galería", business_settings: "Configuración", profiles: "Usuarios", payment_methods: "Métodos de pago",
   products: "Productos", schedule_blocks: "Bloqueos", payroll_runs: "Nómina", payroll_lines: "Volantes de nómina",
+  cash_sessions: "Cajas", cash_movements: "Movimientos de caja",
 };
 
 export const ACTION_LABEL: Record<string, string> = {
   insert: "Creó", update: "Editó", delete: "Eliminó", delete_records: "Eliminó (varios)", complete_appointment: "Completó cita", void_sale: "Anuló venta", quick_sale: "Venta rápida",
+  open_cash_session: "Abrió caja", close_cash_session: "Cerró caja", reopen_cash_session: "Reabrió caja",
 };
 
 const FIELD_LABEL: Record<string, string> = {
@@ -21,6 +23,8 @@ const FIELD_LABEL: Record<string, string> = {
   commission: "comisión", tips: "propinas", base_salary: "sueldo base", bonus: "bonos", deductions: "descuentos", net: "neto a pagar",
   sales_total: "ventas", services_count: "servicios", paid_on: "fecha de pago", paid_method: "método de pago", paid_reference: "referencia",
   period_start: "desde", period_end: "hasta", parallel: "al mismo tiempo que el anterior", team_id: "equipo", birth_month: "mes de cumpleaños", birth_day: "día de cumpleaños",
+  tendered: "efectivo recibido", refunded_at: "reembolsado", kind: "tipo", opening_amount: "fondo inicial", is_cash: "es efectivo", void_reason: "motivo de anulación",
+  counted_cash: "efectivo contado", expected_cash: "efectivo esperado", difference: "diferencia", closed_at: "cerrada",
 };
 const IGNORE = new Set(["updated_at", "created_at", "id", "phone_normalized"]);
 

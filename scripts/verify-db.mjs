@@ -36,6 +36,9 @@ const booking = (o) => ["select create_booking($1::jsonb) r", [JSON.stringify(o)
 
 try {
   await q("begin");
+  // Vista previa de una migración que aún no está en la base: se aplica DENTRO de esta transacción (que siempre se revierte) y se prueba.
+  // Uso: VERIFY_WITH_MIGRATION=supabase/migrations/20261008000015_x.sql,supabase/migrations/20261008000016_caja.sql npm run verify:db (varias, separadas por coma)
+  if (process.env.VERIFY_WITH_MIGRATION) { for (const file of process.env.VERIFY_WITH_MIGRATION.split(",")) await q(readFileSync(file.trim(), "utf8")); console.log("(migración aplicada solo dentro de la transacción de prueba)"); }
   // Funciona también con la base real (donde las especialistas demo ya están desactivadas): todo corre en una transacción que se revierte.
   await q("update employees set active = true, accepts_online_booking = true where is_demo");
   // Si las especialistas demo ya se eliminaron de la base, se recrean aquí (con su horario y sus servicios, igual que en la semilla):
@@ -592,6 +595,234 @@ try {
   await asAnon();
   await expectErr("nómina: anon NO puede leerla", "select count(*) from payroll_runs", [], "permission denied");
   await asAdmin();
+
+  /* ───────── caja: turnos, efectivo recibido y vuelto, entradas y salidas ───────── */
+  console.log("\n— Caja —");
+  await asAdmin();
+  // Si la base ya tiene una caja abierta (uso real), se aparta dentro de esta transacción, que se revierte
+  await q("delete from cash_movements");
+  await q("delete from cash_sessions");
+  const report = async (id) => (await q("select cash_session_report($1) r", [id])).rows[0].r;
+  const expectedNow = async (id) => Number((await report(id)).totals.expected);
+  check("caja: «Efectivo» es efectivo y tarjeta/transferencia no", (await q("select key from payment_methods where is_cash order by key")).rows.map((r) => r.key).join() === "efectivo");
+  check("caja: la hora de cada pago es la real (dos pagos seguidos no empatan)", await (async () => {
+    const s0 = (await q("insert into sales (sale_number, subtotal, total) values ('T-CAJA-0', 100, 100) returning id")).rows[0].id;
+    await q("insert into payments (sale_id, amount, method) values ($1, 10, 'efectivo')", [s0]);
+    await q("insert into payments (sale_id, amount, method) values ($1, 10, 'efectivo')", [s0]);
+    const t = (await q("select paid_at from payments where sale_id=$1 order by paid_at", [s0])).rows;
+    await q("delete from payments where sale_id=$1", [s0]); await q("delete from sales where id=$1", [s0]);
+    return +new Date(t[1].paid_at) > +new Date(t[0].paid_at);
+  })());
+
+  // un cobro en efectivo ANTES de abrir la caja no entra al turno
+  await asUser(uRecep);
+  const qPre = (await q("select create_quick_sale($1::jsonb) r", [JSON.stringify({ items: [{ description: "Antes de abrir", quantity: 1, unit_price: 250 }], payments: [{ method: "efectivo", amount: 250 }] })])).rows[0].r;
+  await asUser(uSpec);
+  await expectErr("caja: el especialista NO puede abrirla", "select open_cash_session(100)", [], "forbidden");
+  await asUser(uRecep);
+  await expectErr("caja: fondo inicial negativo se rechaza", "select open_cash_session(-1)", [], "invalid_amount");
+  await expectErr("caja: no se puede mover dinero con la caja cerrada", "select add_cash_movement('salida', 'gasto', 10)", [], "cash_not_open");
+  await expectErr("caja: no se puede cerrar si no hay caja abierta", "select close_cash_session(0)", [], "cash_not_open");
+  const open = (await q("select open_cash_session(1000, '  Fondo del día  ') r")).rows[0].r;
+  check("caja: abre con número CAJA-#### y fondo inicial", /^CAJA-\d{4}$/.test(open.number));
+  await expectErr("caja: solo puede haber una abierta a la vez", "select open_cash_session(500)", [], "cash_already_open");
+  await asAdmin();
+  await expectErr("caja: tampoco se abre otra directamente (índice único)", "insert into cash_sessions (opening_amount) values (5)", [], "cash_sessions_one_open");
+  check("caja: la nota de apertura se limpia", (await q("select opening_note from cash_sessions where id=$1", [open.id])).rows[0].opening_note === "Fondo del día");
+
+  // ── cobros: efectivo con vuelto, tarjeta aparte, parcial
+  await asUser(uRecep);
+  const cashSale = (await q("select create_quick_sale($1::jsonb) r", [JSON.stringify({ items: [{ description: "Servicio de uñas", quantity: 1, unit_price: 1700 }], payments: [{ method: "efectivo", amount: 1700, tendered: 2000 }] })])).rows[0].r;
+  const cashPay = (await q("select id, amount, tendered from payments where sale_id=$1", [cashSale.sale_id])).rows[0];
+  check("cobro: servicio de 1,700 pagado con 2,000 → queda cobrado 1,700 y se recibió 2,000 (vuelto 300)", Number(cashPay.amount) === 1700 && Number(cashPay.tendered) === 2000);
+  check("cobro: la venta queda pagada", (await q("select payment_status from sales where id=$1", [cashSale.sale_id])).rows[0].payment_status === "pagado");
+  await expectErr("cobro: recibir menos de lo cobrado se rechaza", "select create_quick_sale($1::jsonb)", [JSON.stringify({ items: [{ description: "X", quantity: 1, unit_price: 500 }], payments: [{ method: "efectivo", amount: 500, tendered: 400 }] })], "tendered_too_low");
+  await expectErr("cobro: «recibido» no aplica a tarjeta o transferencia", "select create_quick_sale($1::jsonb)", [JSON.stringify({ items: [{ description: "X", quantity: 1, unit_price: 500 }], payments: [{ method: "tarjeta", amount: 500, tendered: 600 }] })], "tendered_not_cash");
+  const cardSale = (await q("select create_quick_sale($1::jsonb) r", [JSON.stringify({ items: [{ description: "Keratina", quantity: 1, unit_price: 800 }], payments: [{ method: "tarjeta", amount: 800, reference: "AUT-4455" }] })])).rows[0].r;
+  check("cobro con tarjeta: queda registrado con su referencia y sin efectivo recibido", (await q("select reference, tendered from payments where sale_id=$1", [cardSale.sale_id])).rows[0].reference === "AUT-4455");
+  const partial = (await q("select create_quick_sale($1::jsonb) r", [JSON.stringify({ items: [{ description: "Gel", quantity: 1, unit_price: 500 }], payments: [{ method: "efectivo", amount: 300, tendered: 500 }] })])).rows[0].r;
+  check("cobro parcial en efectivo con vuelto → venta 'parcial'", (await q("select payment_status from sales where id=$1", [partial.sale_id])).rows[0].payment_status === "parcial");
+  await expectErr("cobro de saldo: recibido menor se rechaza", "select record_sale_payment($1, 200, 'efectivo', null, false, 150)", [partial.sale_id], "tendered_too_low");
+  const restPay = (await q("select record_sale_payment($1, 200, 'efectivo', null, false, 200) r", [partial.sale_id])).rows[0].r;
+  check("cobro de saldo exacto: venta pagada", Number(restPay.pending) === 0 && (await q("select payment_status from sales where id=$1", [partial.sale_id])).rows[0].payment_status === "pagado");
+  await asAdmin();
+  await expectErr("cobro: el efectivo recibido nunca es menor al cobrado (restricción)", "update payments set tendered = 1 where id=$1", [cashPay.id], "payments_tendered_ck");
+
+  // ── cobro de una cita (antes de completarla) con producción para la especialista
+  await q("update employees set commission_pct = 85 where id=$1", [ana]);
+  const apCaja = (await q(...booking({ first_name: "Caja", last_name: "Cita", phone: "8095558801", employee_id: ana, source: "phone", start_time: iso(base + 400 * 36e5), services: [{ service_id: man }] }))).rows[0].r;
+  await asUser(uRecep);
+  await q("select record_payment($1, 600, 'efectivo', null, false, 1000)", [apCaja.id]);
+  const apSale = (await q("select complete_appointment($1) r", [apCaja.id])).rows[0].r;
+  check("cobro de cita: el pago hecho antes de completar pasa a la venta con su efectivo recibido", Number((await q("select tendered from payments where sale_id=$1", [apSale.sale_id])).rows[0].tendered) === 1000);
+  await asAdmin();
+  await q("update sales set completed_at = clock_timestamp() where id=$1", [apSale.sale_id]);
+  await q("update sale_items set commission_pct = null where sale_id=$1", [apSale.sale_id]); // sin porcentaje propio del servicio: manda el de la especialista
+
+  // ── reporte del turno
+  let rep = await report(open.id);
+  // efectivo = 1700 + 300 + 200 + 600 = 2800; no entra lo cobrado antes de abrir (250) ni la tarjeta (800)
+  check("caja: efectivo cobrado = solo lo cobrado en efectivo DESPUÉS de abrir (no el de antes ni la tarjeta)", Number(rep.totals.cash_in) === 2800, "cash_in " + rep.totals.cash_in);
+  check("caja: lo cobrado en efectivo antes de abrir la caja no aparece en el turno", rep.payments.every((p) => p.sale_id !== qPre.sale_id));
+  check("caja: efectivo esperado = fondo + cobrado", Number(rep.totals.expected) === 3800 && Number(rep.totals.opening) === 1000);
+  check("caja: el vuelto no cambia la caja (se cuenta lo cobrado, no lo recibido)", Number(rep.totals.cash_in) === 2800);
+  const mTarjeta = rep.methods.find((m) => m.method === "tarjeta"), mEfectivo = rep.methods.find((m) => m.method === "efectivo");
+  check("caja: por método — tarjeta aparte, sin sumarse al efectivo", mTarjeta && !mTarjeta.is_cash && Number(mTarjeta.total) === 800 && mEfectivo.is_cash && Number(mEfectivo.total) === 2800);
+  check("caja: el reporte lista cada cobro con cliente/venta y lo recibido", rep.payments.length === 5 && rep.payments.some((p) => Number(p.tendered) === 2000 && /^GBC-/.test(p.sale_number)) && rep.payments.some((p) => p.client === "Caja Cita"));
+  check("caja: ventas del turno", Number(rep.sales.count) === 4 && Number(rep.sales.total) === 3600);
+  const prodAna = rep.production.find((p) => p.employee_id === ana);
+  check("producción: Ana 600 → le corresponde el 85% (510) y 90 son del salón", prodAna && Number(prodAna.production) === 600 && Number(prodAna.earned) === 510 && Number(prodAna.services) === 1, JSON.stringify(prodAna));
+  const prodNone = rep.production.find((p) => p.employee_id === null);
+  check("producción: lo vendido sin especialista queda aparte y sin porcentaje", prodNone && Number(prodNone.production) === 3000 && Number(prodNone.no_pct) === 3000);
+  // un servicio con su propio porcentaje manda sobre el de la especialista
+  await q("update sale_items set commission_pct = 70 where sale_id=$1", [apSale.sale_id]);
+  check("producción: el porcentaje propio del servicio manda sobre el de la especialista", Number((await report(open.id)).production.find((p) => p.employee_id === ana).earned) === 420);
+  await q("update sale_items set commission_pct = null where sale_id=$1", [apSale.sale_id]);
+
+  // ── entradas y salidas de efectivo
+  await asUser(uRecep);
+  const out1 = (await q("select add_cash_movement('salida', 'compra', 300, 'Esponjas y limas') r")).rows[0].r;
+  check("salida: baja el efectivo esperado", Number(out1.expected) === 3500 && await expectedNow(open.id) === 3500);
+  await expectErr("salida: a una especialista exige elegirla", "select add_cash_movement('salida', 'pago_especialista', 100)", [], "employee_required");
+  await expectErr("salida: especialista que no existe", "select add_cash_movement('salida', 'pago_especialista', 100, null, gen_random_uuid())", [], "employee_required");
+  await expectErr("salida «otro» exige explicar en qué", "select add_cash_movement('salida', 'otro', 100)", [], "description_required");
+  await expectErr("salida: no puede ser mayor que el efectivo en caja", "select add_cash_movement('salida', 'retiro', 3500.01)", [], "insufficient_cash");
+  await expectErr("movimiento: monto cero o negativo", "select add_cash_movement('salida', 'gasto', 0)", [], "invalid_amount");
+  await expectErr("movimiento: categoría que no corresponde al tipo", "select add_cash_movement('entrada', 'gasto', 10)", [], "invalid_category");
+  await expectErr("movimiento: tipo desconocido", "select add_cash_movement('prestamo', 'otro', 10, 'x')", [], "invalid_movement_kind");
+  const outAna = (await q("select add_cash_movement('salida', 'pago_especialista', 510, 'Producción del día', $1) r", [ana])).rows[0].r;
+  check("pago a especialista: baja la caja y queda con su nombre", Number(outAna.expected) === 2990 && (await q("select employee_name from cash_movements where id=$1", [outAna.id])).rows[0].employee_name === "Ana (demo)");
+  const inn = (await q("select add_cash_movement('entrada', 'aporte', 200, 'Cambio menudo') r")).rows[0].r;
+  check("entrada: sube la caja", Number(inn.expected) === 3190);
+  rep = await report(open.id);
+  check("reporte: suma entradas y salidas del turno", Number(rep.totals.salidas) === 810 && Number(rep.totals.entradas) === 200 && rep.movements.length === 3);
+  check("producción: lo entregado a la especialista desde la caja aparece en su fila", Number(rep.production.find((p) => p.employee_id === ana).paid_out) === 510);
+  await expectErr("anular un movimiento: recepción NO puede", "select void_cash_movement($1, 'error')", [out1.id], "forbidden");
+  await asUser(uManager);
+  await expectErr("anular un movimiento: exige motivo", "select void_cash_movement($1, ' ')", [out1.id], "reason_required");
+  await q("select add_cash_movement('salida', 'retiro', 3100, 'Retiro de prueba')");
+  await expectErr("anular una entrada que dejaría la caja en negativo se rechaza", "select void_cash_movement($1, 'x')", [inn.id], "insufficient_cash");
+  const anuladoRetiro = (await q("select id from cash_movements where description='Retiro de prueba'")).rows[0].id;
+  const v1 = (await q("select void_cash_movement($1, 'Se registró dos veces') r", [anuladoRetiro])).rows[0].r;
+  check("anular una salida devuelve el dinero a la caja", Number(v1.expected) === 3190 && await expectedNow(open.id) === 3190);
+  await expectErr("un movimiento no se anula dos veces", "select void_cash_movement($1, 'otra vez')", [anuladoRetiro], "cash_movement_voided");
+  check("el movimiento anulado se queda en la lista con su motivo", (await report(open.id)).movements.some((m) => m.id === anuladoRetiro && m.void_reason === "Se registró dos veces"));
+  await asAdmin();
+  await expectErr("movimientos: nadie cambia el monto después", "update cash_movements set amount = 1 where id=$1", [out1.id], "cash_movement_locked");
+
+  // ── reembolsos: el efectivo devuelto sale de la caja del momento; lo de tarjeta no toca la caja
+  await asUser(uManager);
+  const before = await expectedNow(open.id);
+  await q("select refund_payment($1)", [(await q("select id from payments where sale_id=$1 and amount=200", [partial.sale_id])).rows[0].id]);
+  check("reembolso en efectivo: baja la caja y guarda cuándo se devolvió", await expectedNow(open.id) === before - 200 && (await q("select refunded_at from payments where sale_id=$1 and amount=200", [partial.sale_id])).rows[0].refunded_at !== null);
+  rep = await report(open.id);
+  check("reembolso: el cobro sigue en el reporte marcado como reembolsado en el turno", rep.payments.some((p) => Number(p.amount) === 200 && p.status === "reembolsado" && p.refunded_in_turn === true) && Number(rep.totals.cash_refunds) === 200);
+  const beforeCard = await expectedNow(open.id);
+  await q("select void_sale($1, 'Cliente canceló')", [cardSale.sale_id]);
+  check("anular una venta pagada con tarjeta no mueve el efectivo de la caja", await expectedNow(open.id) === beforeCard);
+  check("anular venta: los cobros quedan con la hora del reembolso", (await q("select refunded_at from payments where sale_id=$1", [cardSale.sale_id])).rows[0].refunded_at !== null);
+  rep = await report(open.id);
+  check("producción: las ventas anuladas ya no cuentan", Number(rep.production.find((p) => p.employee_id === null).production) === 2200);
+
+  // ── cierre
+  await asUser(uRecep);
+  const expectedClose = await expectedNow(open.id);
+  await expectErr("cierre: el efectivo contado no puede ser negativo", "select close_cash_session(-5)", [], "invalid_amount");
+  await expectErr("cierre: si hay diferencia, la nota es obligatoria", "select close_cash_session($1)", [expectedClose - 25], "difference_note_required");
+  await expectErr("cierre: la nota en blanco no cuenta", "select close_cash_session($1, '   ')", [expectedClose + 10], "difference_note_required");
+  const closed = (await q("select close_cash_session($1, 'Faltaron 25 pesos del cambio') r", [expectedClose - 25])).rows[0].r;
+  check("cierre: guarda lo esperado, lo contado y la diferencia (faltante)", Number(closed.expected) === expectedClose && Number(closed.difference) === -25);
+  const cs = (await q("select closed_at, closed_by, expected_cash, counted_cash, difference, closing_note, report is not null has_report from cash_sessions where id=$1", [open.id])).rows[0];
+  check("cierre: queda cerrada con quién la cerró y una foto del reporte", cs.closed_at && cs.closed_by === uRecep && cs.has_report && cs.closing_note.startsWith("Faltaron"));
+  await expectErr("cierre: no se cierra dos veces", "select close_cash_session(1)", [], "cash_not_open");
+  await expectErr("cierre: ya no se mueve dinero en un turno cerrado", "select add_cash_movement('salida', 'gasto', 1)", [], "cash_not_open");
+  await asAdmin();
+  await expectErr("cierre: un turno cerrado no se modifica directamente", "update cash_sessions set counted_cash = 1 where id=$1", [open.id], "cash_session_closed");
+  await expectErr("cierre: tampoco se le agregan movimientos por la puerta de atrás", "insert into cash_movements (session_id, kind, category, amount) values ($1, 'salida', 'gasto', 1)", [open.id], "cash_session_closed");
+  await asUser(uManager);
+  await expectErr("cierre: ni se anulan movimientos de un turno cerrado", "select void_cash_movement($1, 'x')", [out1.id], "cash_session_closed");
+  // la foto del cierre no cambia por lo que pase después
+  const snap = JSON.stringify((await report(open.id)).totals);
+  await asUser(uRecep);
+  await q("select create_quick_sale($1::jsonb)", [JSON.stringify({ items: [{ description: "Cobro con la caja cerrada", quantity: 1, unit_price: 100 }], payments: [{ method: "efectivo", amount: 100 }] })]);
+  await asUser(uManager);
+  check("cierre: el reporte guardado no cambia con cobros posteriores", JSON.stringify((await report(open.id)).totals) === snap);
+
+  // ── reabrir
+  await asUser(uRecep);
+  await expectErr("reabrir: recepción NO puede", "select reopen_cash_session($1, 'x')", [open.id], "forbidden");
+  await asUser(uManager);
+  await expectErr("reabrir: exige motivo", "select reopen_cash_session($1, '')", [open.id], "reason_required");
+  const ro = (await q("select reopen_cash_session($1, 'Contó mal') r", [open.id])).rows[0].r;
+  const rs = (await q("select closed_at, counted_cash, report from cash_sessions where id=$1", [open.id])).rows[0];
+  check("reabrir: vuelve a estar abierta, sin cierre ni foto", ro.number === open.number && rs.closed_at === null && rs.counted_cash === null && rs.report === null);
+  check("reabrir: queda en la auditoría con el motivo", (await q("select count(*) from audit_logs where action='reopen_cash_session' and after_data->>'reason'='Contó mal'")).rows[0].count === "1");
+  // al reabrir, lo cobrado en efectivo mientras estuvo cerrada (100) vuelve a contar: ese dinero sí estuvo en la caja
+  const exp2 = await expectedNow(open.id);
+  check("reabrir: el efectivo cobrado mientras estuvo cerrada vuelve a contar", exp2 === expectedClose + 100);
+  const exact = (await q("select close_cash_session($1) r", [exp2])).rows[0].r;
+  check("cierre exacto: diferencia 0 y no pide nota", Number(exact.difference) === 0);
+  const rep1 = JSON.stringify((await report(open.id)).totals);
+
+  // ── dos turnos seguidos no se cuentan dos veces
+  await asUser(uRecep);
+  const open2 = (await q("select open_cash_session($1) r", [exp2])).rows[0].r;
+  await asUser(uManager);
+  await expectErr("reabrir: no se puede si hay otra caja abierta", "select reopen_cash_session($1, 'x')", [open.id], "cash_already_open");
+  await asUser(uRecep);
+  const s2 = (await q("select create_quick_sale($1::jsonb) r", [JSON.stringify({ items: [{ description: "Turno 2", quantity: 1, unit_price: 400 }], payments: [{ method: "efectivo", amount: 400, tendered: 500 }] })])).rows[0].r;
+  const rep2 = await report(open2.id);
+  check("dos turnos: el segundo solo cuenta sus propios cobros", Number(rep2.totals.cash_in) === 400 && Number(rep2.totals.expected) === exp2 + 400 && rep2.payments.length === 1 && rep2.payments[0].sale_id === s2.sale_id);
+  check("dos turnos: el primero sigue igual", JSON.stringify((await report(open.id)).totals) === rep1);
+  // un reembolso de un cobro del turno anterior sale de la caja de HOY
+  await asUser(uManager);
+  await q("select refund_payment($1)", [cashPay.id]);
+  const rep2b = await report(open2.id);
+  check("dos turnos: el efectivo devuelto hoy de un cobro de ayer sale de la caja de hoy", Number(rep2b.totals.cash_refunds) === 1700 && Number(rep2b.totals.expected) === exp2 + 400 - 1700);
+  check("dos turnos: y no cambia el turno de ayer", JSON.stringify((await report(open.id)).totals) === rep1);
+  await q("select add_cash_movement('salida', 'retiro', 100, 'Para el banco')");
+  await q("select close_cash_session($1)", [await expectedNow(open2.id)]);
+  await expectErr("reabrir: solo el último turno", "select reopen_cash_session($1, 'x')", [open.id], "cash_not_latest");
+
+  // ── efectivo cobrado fuera de todo turno: se avisa (no se pierde)
+  await asUser(uRecep);
+  const orphan = (await q("select create_quick_sale($1::jsonb) r", [JSON.stringify({ items: [{ description: "Con la caja cerrada", quantity: 1, unit_price: 350 }], payments: [{ method: "efectivo", amount: 350 }] })])).rows[0].r;
+  const un = (await q("select cash_unassigned() r")).rows[0].r;
+  check("caja: el efectivo cobrado con la caja cerrada (y ya usándola) se avisa", Number(un.count) >= 1 && un.items.some((i) => i.sale_id === orphan.sale_id && Number(i.amount) === 350));
+  check("caja: lo cobrado antes del primer turno o dentro de un turno NO se marca como suelto", !un.items.some((i) => i.sale_id === qPre.sale_id || i.sale_id === cashSale.sale_id || i.sale_id === s2.sale_id));
+  await asUser(uSpec);
+  await expectErr("caja: el especialista NO pide el efectivo suelto", "select cash_unassigned()", [], "forbidden");
+  await asUser(uRecep);
+  // ── permisos y datos
+  await asUser(uSpec);
+  check("caja: el especialista NO ve turnos ni movimientos", (await q("select count(*) from cash_sessions")).rows[0].count === "0" && (await q("select count(*) from cash_movements")).rows[0].count === "0");
+  await expectErr("caja: el especialista NO pide el reporte", "select cash_session_report($1)", [open.id], "forbidden");
+  await asUser(uRecep);
+  check("caja: recepción sí ve los turnos", Number((await q("select count(*) from cash_sessions")).rows[0].count) === 2);
+  await expectErr("caja: nadie escribe las tablas directamente", "insert into cash_movements (session_id, kind, category, amount) values ($1, 'salida', 'gasto', 1)", [open2.id], "permission denied");
+  await expectErr("caja: nadie edita los turnos directamente", "update cash_sessions set opening_amount = 9 where id=$1", [open2.id], "permission denied");
+  await asAnon();
+  await expectErr("caja: anon NO puede leerla", "select count(*) from cash_sessions", [], "permission denied");
+  await expectErr("caja: anon NO puede abrirla", "select open_cash_session(1)", [], "permission denied");
+  await asAdmin();
+  check("caja: movimientos y aperturas/cierres quedan en la auditoría", Number((await q("select count(*) from audit_logs where action in ('open_cash_session','close_cash_session')")).rows[0].count) >= 3
+    && Number((await q("select count(*) from audit_logs where entity='cash_movements'")).rows[0].count) >= 4);
+
+  // ── borrar usuarios y especialistas no se queda atorado por el historial de caja
+  const tmpEmp = (await q("insert into employees (full_name, is_demo) values ('Temp Caja', false) returning id")).rows[0].id;
+  const tmpUser = await mk("tmpcaja", "receptionist");
+  await asUser(uManager);
+  // el turno 2 sigue abierto o cerrado según la prueba anterior: se usa el abierto, o uno nuevo
+  const openNow = (await q("select id from cash_sessions where closed_at is null")).rows[0];
+  let sid = openNow?.id;
+  if (!sid) { sid = (await q("select open_cash_session(2000) r")).rows[0].r.id; }
+  await q("select add_cash_movement('salida', 'propina', 50, null, $1)", [tmpEmp]);
+  await asAdmin();
+  await q("delete from employees where id=$1", [tmpEmp]);
+  check("caja: eliminar una especialista deja el movimiento con su nombre", (await q("select employee_id, employee_name from cash_movements where employee_name='Temp Caja'")).rows[0].employee_id === null);
+  await q("update cash_sessions set opened_by=$1 where id=$2", [tmpUser, sid]);
+  await q("delete from auth.users where id=$1", [tmpUser]);
+  check("caja: eliminar a quien abrió o registró no se atora", true);
 
 } catch (e) {
   console.error("ERROR inesperado:", e.message);

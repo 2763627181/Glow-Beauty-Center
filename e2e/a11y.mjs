@@ -41,7 +41,7 @@ await scan("/admin/login", go("/admin/login"));
 console.log("\n══ PANEL ══");
 await login(page, "tmp-admin@glow.test");
 for (const p of ["/admin", "/admin/calendar", "/admin/appointments", "/admin/appointments/board", "/admin/clients", "/admin/services", "/admin/services?tab=categorias", "/admin/services?tab=productos", "/admin/services/new",
-  "/admin/staff", "/admin/staff/new", "/admin/sales", "/admin/payments", "/admin/reports", "/admin/promotions", "/admin/gallery",
+  "/admin/staff", "/admin/staff/new", "/admin/sales", "/admin/payments", "/admin/cash", "/admin/reports", "/admin/promotions", "/admin/gallery",
   "/admin/settings?tab=negocio", "/admin/settings?tab=sitio", "/admin/settings?tab=horarios", "/admin/settings?tab=reservas", "/admin/settings?tab=pagos", "/admin/settings?tab=whatsapp", "/admin/settings?tab=integraciones",
   "/admin/audit", "/admin/users", "/admin/account"]) await scan(p, go(p));
 await scan("modal: ficha de cita", async () => { await page.goto(BASE + "/admin/appointments"); await page.waitForLoadState("networkidle"); await page.getByRole("button", { name: "Abrir", exact: true }).first().click(); await page.getByRole("dialog").waitFor(); await page.waitForTimeout(500); });

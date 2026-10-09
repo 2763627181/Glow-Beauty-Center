@@ -17,6 +17,7 @@ export const PERMISSIONS = {
   payroll: ["super_admin", "manager"],
   sales: ["super_admin", "manager", "receptionist"],
   payments: ["super_admin", "manager", "receptionist"],
+  cash: ["super_admin", "manager", "receptionist"],
   reports: ["super_admin", "manager"],
   promotions: ["super_admin", "manager"],
   gallery: ["super_admin", "manager"],
@@ -37,6 +38,8 @@ export const ACTIONS = {
   manageClients: ["super_admin", "manager", "receptionist"],
   seeMoney: ["super_admin", "manager", "receptionist"],
   managePayroll: ["super_admin", "manager"],
+  manageCash: ["super_admin", "manager", "receptionist"], // abrir y cerrar la caja, registrar entradas y salidas de efectivo
+  voidCash: ["super_admin", "manager"], // anular movimientos de caja y reabrir un cierre
 } as const satisfies Record<string, readonly Role[]>;
 export type ActionKey = keyof typeof ACTIONS;
 

@@ -59,6 +59,9 @@ async function HorariosTab({ hours }: { hours: ReturnType<typeof normalizeSettin
 
 async function PagosTab() {
   const sb = await createClient();
+  // `is_cash` existe cuando la actualización de la caja está instalada; si no, no se ofrece esa opción
+  const full = await sb.from("payment_methods").select("key,label,active,is_cash").order("display_order").order("label");
+  if (!full.error) return <PaymentMethodsManager methods={(full.data ?? []).map((m) => ({ key: m.key, label: m.label, active: m.active, isCash: !!m.is_cash }))} />;
   const { data } = await sb.from("payment_methods").select("key,label,active").order("display_order").order("label");
   return <PaymentMethodsManager methods={data ?? []} />;
 }
