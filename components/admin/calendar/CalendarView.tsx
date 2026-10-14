@@ -58,7 +58,7 @@ function blocksFor(appts: ApptRow[], day: string, employeeId: string | null): Bl
 }
 
 export function CalendarView({ view, date, today, appts, employees, query }: {
-  view: View; date: string; today: string; appts: ApptRow[]; employees: { id: string; full_name: string }[]; query: string;
+  view: View; date: string; today: string; appts: ApptRow[]; employees: { id: string; full_name: string; label?: string }[]; query: string;
 }) {
   const { role } = useAdmin();
   const manage = allowed(role, "manageAppointments");
@@ -78,7 +78,7 @@ export function CalendarView({ view, date, today, appts, employees, query }: {
   const now = useNow();
   const nowMin = today === date && now !== null ? minutesOfDay(new Date(now).toISOString()) : null;
   const unassigned = blocksFor(appts, date, null);
-  const cols = [...employees.map((e) => ({ id: e.id as string | null, name: e.full_name })), ...(unassigned.length ? [{ id: null, name: "Sin asignar" }] : [])];
+  const cols = [...employees.map((e) => ({ id: e.id as string | null, name: e.label ?? e.full_name })), ...(unassigned.length ? [{ id: null, name: "Sin asignar" }] : [])];
 
   function clickColumn(e: React.MouseEvent<HTMLDivElement>, empId: string | null) {
     if (!manage || e.target !== e.currentTarget) return; // solo en espacio libre, no sobre una cita

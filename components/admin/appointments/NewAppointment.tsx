@@ -105,7 +105,7 @@ export function NewAppointmentDialog({ mode, preset, onClose }: { mode: Mode; pr
             if (id) setTeamBy((m) => Object.fromEntries(sel.map((k) => [k, id ? [id] : m[k] ?? []])));
           }}>
             <option value="">Sin asignar</option>
-            {staff.filter((s) => s.active).map((s) => <option key={s.id} value={s.id}>{s.full_name}</option>)}
+            {staff.filter((s) => s.active).map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select></div>
         <div className={u.field}><label htmlFor="n-st">Estado inicial</label>
           <select id="n-st" value={f.status} onChange={(e) => set({ status: e.target.value })}>

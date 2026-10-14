@@ -2,13 +2,15 @@ import "server-only";
 import type { Session } from "@/lib/auth";
 import { DEFAULT_BUSINESS } from "@/lib/domain/settings";
 import { can } from "@/lib/permissions";
+import { staffLabel } from "@/lib/domain/staffLabel";
 import { mergeTemplates, type WaTemplates } from "@/lib/domain/whatsappTemplates";
 import { createClient } from "@/lib/supabase/server";
 import { listServiceOptions, type ServiceOption } from "./options";
 
 export type AdminData = {
   userId: string; role: Session["role"]; employeeId: string | null; fullName: string;
-  staff: { id: string; full_name: string; active: boolean }[];
+  /** `label` = «02 · Nombre» (número y nombre) para los selectores del panel. */
+  staff: { id: string; full_name: string; active: boolean; employee_number: number | null; label: string }[];
   options: ServiceOption[];
   links: { employee_id: string; service_id: string }[];
   products: { id: string; name: string; price: number }[];
@@ -24,6 +26,15 @@ export type AdminData = {
 };
 
 type Sb = Awaited<ReturnType<typeof createClient>>;
+
+/** Especialistas con su número (si la columna aún no existe en la base, sin número) en el orden del panel: manual, número y nombre. */
+async function loadStaff(sb: Sb): Promise<AdminData["staff"]> {
+  const full = await sb.from("employees").select("id,full_name,active,employee_number").order("display_order").order("employee_number", { nullsFirst: false }).order("full_name");
+  const rows: { id: string; full_name: string; active: boolean; employee_number?: number | null }[] = !full.error
+    ? full.data ?? []
+    : (await sb.from("employees").select("id,full_name,active").order("display_order").order("full_name")).data ?? [];
+  return rows.map((r) => ({ id: r.id, full_name: r.full_name, active: r.active, employee_number: r.employee_number ?? null, label: staffLabel(r.full_name, r.employee_number ?? null) }));
+}
 
 /** Métodos de pago activos. Si la base aún no tiene la columna `is_cash` (caja sin instalar), «efectivo» cuenta como efectivo. */
 async function loadMethods(sb: Sb): Promise<AdminData["paymentMethods"]> {
@@ -47,7 +58,7 @@ async function loadCash(sb: Sb, s: Session): Promise<AdminData["cash"]> {
 export async function loadAdminData(s: Session): Promise<AdminData> {
   const sb = await createClient();
   const [staff, links, products, methods, settings, options, cash] = await Promise.all([
-    sb.from("employees").select("id,full_name,active").order("display_order"),
+    loadStaff(sb),
     sb.from("employee_services").select("employee_id,service_id"),
     sb.from("products").select("id,name,price").eq("active", true).order("display_order").order("name"),
     loadMethods(sb),
@@ -58,7 +69,7 @@ export async function loadAdminData(s: Session): Promise<AdminData> {
   const map = Object.fromEntries((settings.data ?? []).map((r) => [r.key, r.value as Record<string, unknown>]));
   return {
     userId: s.userId, role: s.role, employeeId: s.employeeId, fullName: s.fullName,
-    staff: staff.data ?? [], options, links: links.data ?? [],
+    staff, options, links: links.data ?? [],
     products: (products.data ?? []).map((p) => ({ ...p, price: Number(p.price) })),
     paymentMethods: methods.length ? methods : [{ key: "efectivo", label: "Efectivo", isCash: true }],
     cash,

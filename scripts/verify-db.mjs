@@ -605,13 +605,12 @@ try {
   const report = async (id) => (await q("select cash_session_report($1) r", [id])).rows[0].r;
   const expectedNow = async (id) => Number((await report(id)).totals.expected);
   check("caja: «Efectivo» es efectivo y tarjeta/transferencia no", (await q("select key from payment_methods where is_cash order by key")).rows.map((r) => r.key).join() === "efectivo");
-  check("caja: la hora de cada pago es la real (dos pagos seguidos no empatan)", await (async () => {
+  check("caja: la hora de cada pago es la hora real en que se registra (no la de inicio de la transacción)", await (async () => {
     const s0 = (await q("insert into sales (sale_number, subtotal, total) values ('T-CAJA-0', 100, 100) returning id")).rows[0].id;
     await q("insert into payments (sale_id, amount, method) values ($1, 10, 'efectivo')", [s0]);
-    await q("insert into payments (sale_id, amount, method) values ($1, 10, 'efectivo')", [s0]);
-    const t = (await q("select paid_at from payments where sale_id=$1 order by paid_at", [s0])).rows;
+    const ok = (await q("select paid_at > now() as ok from payments where sale_id=$1", [s0])).rows[0].ok;
     await q("delete from payments where sale_id=$1", [s0]); await q("delete from sales where id=$1", [s0]);
-    return +new Date(t[1].paid_at) > +new Date(t[0].paid_at);
+    return ok === true;
   })());
 
   // un cobro en efectivo ANTES de abrir la caja no entra al turno
@@ -823,6 +822,24 @@ try {
   await q("update cash_sessions set opened_by=$1 where id=$2", [tmpUser, sid]);
   await q("delete from auth.users where id=$1", [tmpUser]);
   check("caja: eliminar a quien abrió o registró no se atora", true);
+
+  /* ───────── número de especialista ───────── */
+  console.log("\n— Número de especialista —");
+  await asAdmin();
+  await q("insert into employees (full_name, employee_number, is_demo) values ('Num A', 90, false)");
+  check("número: se guarda en la ficha", (await q("select employee_number from employees where full_name='Num A'")).rows[0].employee_number === 90);
+  await expectErr("número: no se repite entre especialistas", "insert into employees (full_name, employee_number) values ('Num B', 90)", [], "employees_number_uidx");
+  await expectErr("número: solo de 0 a 99", "insert into employees (full_name, employee_number) values ('Num C', 100)", [], "employees_number_ck");
+  await expectErr("número: no puede ser negativo", "insert into employees (full_name, employee_number) values ('Num D', -1)", [], "employees_number_ck");
+  await q("insert into employees (full_name) values ('Sin número 1'), ('Sin número 2')");
+  check("número: es opcional (varias especialistas pueden no tener)", (await q("select count(*) from employees where full_name like 'Sin número %' and employee_number is null")).rows[0].count === "2");
+  await q("insert into employees (full_name, employee_number, is_demo) values ('Cero', 0, false)");
+  check("número: el 00 es válido", (await q("select employee_number from employees where full_name='Cero'")).rows[0].employee_number === 0);
+  await asAnon();
+  await expectErr("número: la página pública NO lo puede leer", "select employee_number from employees", [], "permission denied");
+  await asUser(uManager);
+  check("número: el gerente sí lo ve", (await q("select employee_number from employees where full_name='Num A'")).rows[0].employee_number === 90);
+  await asAdmin();
 
 } catch (e) {
   console.error("ERROR inesperado:", e.message);

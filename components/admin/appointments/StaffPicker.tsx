@@ -3,7 +3,7 @@
 import { staffChoices } from "./lines";
 import u from "../ui.module.css";
 
-type Staff = { id: string; full_name: string; active: boolean };
+type Staff = { id: string; full_name: string; active: boolean; label?: string };
 type Link = { employee_id: string; service_id: string };
 
 /**
@@ -18,7 +18,7 @@ export function StaffPicker({ label, serviceId, staff, links, value, onChange }:
   const chip = (s: Staff) => (
     <label key={s.id} className={u.chipPick}>
       <input type="checkbox" checked={value.includes(s.id)} onChange={() => toggle(s.id)} />
-      {s.full_name}
+      {s.label ?? s.full_name}
     </label>
   );
   return (

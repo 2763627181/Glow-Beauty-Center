@@ -100,7 +100,7 @@ function QuickSaleModal({ onClose }: { onClose: () => void }) {
             <input id="qs-phone" type="tel" inputMode="tel" value={phone} onChange={(e) => { setPhone(e.target.value); setClient(null); }} onBlur={lookup} placeholder="809-555-5555" />
             {client && <span className={u.hint}>Cliente: {client.name}</span>}</div>
           <div className={u.field}><label htmlFor="qs-emp">Atendió (opcional)</label>
-            <select id="qs-emp" value={emp} onChange={(e) => setEmp(e.target.value)}><option value="">—</option>{staff.filter((s) => s.active).map((s) => <option key={s.id} value={s.id}>{s.full_name}</option>)}</select></div>
+            <select id="qs-emp" value={emp} onChange={(e) => setEmp(e.target.value)}><option value="">—</option>{staff.filter((s) => s.active).map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</select></div>
         </div>
 
         {lines.length > 0 && (

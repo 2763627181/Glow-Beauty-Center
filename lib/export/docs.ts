@@ -9,6 +9,7 @@ import type { PayrollLine, PayrollRun } from "../data/payroll.ts";
 import { apptSubtotal, apptTotal } from "../data/appointment-math.ts";
 import { buildTimeline, changeOf, MOVE_LABEL, splitProduction, type CashReport, type TimelineRow } from "../domain/cash.ts";
 import { periodLabel as maniPeriodLabel, type ManiSummary, type Period } from "../domain/manicurists.ts";
+import { staffLabel } from "../domain/staffLabel.ts";
 import { periodLabel } from "../domain/payroll.ts";
 import { summarize, type ApptIn, type Row, type SaleIn, type SummaryOpts } from "../domain/reports.ts";
 import { SOURCE_LABEL, STATUS_META } from "../domain/status.ts";
@@ -484,11 +485,11 @@ export function cashDoc(r: CashReport, ctx: Ctx): ExportDoc {
 export function manicuristsDoc(period: Period, list: ManiSummary[], onlyPaid: boolean, ctx: Ctx): ExportDoc {
   const sum = (pick: (m: ManiSummary) => number) => round2(list.reduce((t, m) => t + pick(m), 0));
   const people: R[] = list.map((m) => ({
-    emp: m.name, serv: m.services, cobrado: m.charged, pct: m.pct == null ? null : m.pct / 100, com: m.commission, sueldo: m.salary, total: m.payable,
+    emp: staffLabel(m.name, m.number), serv: m.services, cobrado: m.charged, pct: m.pct == null ? null : m.pct / 100, com: m.commission, sueldo: m.salary, total: m.payable,
     pend: m.pendingAmount, nota: m.missingPct ? "Falta el porcentaje en su ficha: la comisión salió en 0" : "",
   }));
   const lines: R[] = list.flatMap((m) => m.lines.map((l) => ({
-    emp: m.name, fecha: l.date, cliente: l.client, serv: l.description + (l.shared ? " (compartido)" : ""), venta: l.saleNumber, monto: l.total,
+    emp: staffLabel(m.name, m.number), fecha: l.date, cliente: l.client, serv: l.description + (l.shared ? " (compartido)" : ""), venta: l.saleNumber, monto: l.total,
     estado: l.status === "pagado" ? "Cobrado" : l.status === "parcial" ? "Cobro parcial" : "Sin cobrar", pct: l.pct / 100, com: l.counts ? l.commission : null, cuenta: l.counts ? "Sí" : "No",
   })));
   return {

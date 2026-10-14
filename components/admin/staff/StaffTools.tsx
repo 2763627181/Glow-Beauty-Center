@@ -7,11 +7,12 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
 import { deleteEmployee, moveEmployee } from "@/lib/actions/admin/staff";
 import { birthdayLabel, cumpleLabel } from "@/lib/domain/birthday";
+import { staffLabel } from "@/lib/domain/staffLabel";
 import { ConfirmDialog, useToast } from "../overlay";
 import u from "../ui.module.css";
 
 type E = {
-  id: string; full_name: string; specialty: string | null; avatar_url: string | null; active: boolean; services: number;
+  id: string; full_name: string; employee_number: number | null; specialty: string | null; avatar_url: string | null; active: boolean; services: number;
   schedules: number; online: boolean; birthday: { month: number; day: number; in: number } | null;
 };
 
@@ -29,7 +30,7 @@ export function StaffList({ staff }: { staff: E[] }) {
             <span style={{ position: "relative", width: 56, height: 56, borderRadius: "50%", overflow: "hidden", background: "var(--color-blush)", flex: "none", opacity: e.active ? 1 : 0.55 }}>
               {e.avatar_url && <Image src={e.avatar_url} alt="" fill sizes="56px" style={{ objectFit: "cover" }} />}
             </span>
-            <span><strong>{e.full_name}</strong><br /><span className={u.sub}>{e.specialty ?? "—"} · {e.services} servicios</span><br />
+            <span><strong>{staffLabel(e.full_name, e.employee_number)}</strong><br /><span className={u.sub}>{e.specialty ?? "—"} · {e.services} servicios</span><br />
               <span style={{ display: "inline-flex", flexWrap: "wrap", gap: 4 }}>
                 <span className={`${u.badge} ${e.active ? u.green : u.gray}`}>{e.active ? "Activo" : "Inactivo"}</span>
                 {e.active && e.online && e.schedules === 0 && <span className={`${u.badge} ${u.gold}`}>Sin horario</span>}

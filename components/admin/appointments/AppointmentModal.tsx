@@ -121,7 +121,7 @@ export function AppointmentModal({ appt, onClose }: { appt: ApptRow | null; onCl
               <div className={u.field}><label htmlFor="rs-emp">Asignar todo a</label>
                 <select id="rs-emp" value={emp} onChange={(e) => setEmp(e.target.value)}>
                   <option value="">Mantener especialistas actuales</option>
-                  {staff.filter((s) => s.active).map((s) => <option key={s.id} value={s.id}>{s.full_name}</option>)}
+                  {staff.filter((s) => s.active).map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
                 </select>
               </div>
               {when && <div className={u.span2}><PastNotice whenISO={fromLocalInput(when)} /></div>}

@@ -6,6 +6,7 @@ import { StaffDelete } from "@/components/admin/staff/StaffTools";
 import { ScheduleEditor, TimeOffEditor, type Day } from "@/components/admin/staff/ScheduleEditor";
 import u from "@/components/admin/ui.module.css";
 import { requireAccess } from "@/lib/auth";
+import { staffLabel } from "@/lib/domain/staffLabel";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata = { title: "Especialista" };
@@ -40,12 +41,12 @@ export default async function StaffDetail({ params }: PageProps<"/admin/staff/[i
   });
   return (
     <>
-      <PageHead title={e.full_name} sub={e.specialty ?? undefined}><StaffDelete id={e.id} name={e.full_name} /></PageHead>
+      <PageHead title={staffLabel(e.full_name, e.employee_number)} sub={e.specialty ?? undefined}><StaffDelete id={e.id} name={e.full_name} /></PageHead>
       <div className={u.grid}>
         {e.active && e.accepts_online_booking && (scheds ?? []).length === 0 && <Alert kind="warn"><strong>Sin horario de trabajo.</strong> Mientras no lo guardes abajo (sección «Horario semanal»), {e.full_name} no aparece en la reserva en línea.</Alert>}
         {e.active && e.accepts_online_booking && (links ?? []).length === 0 && <Alert kind="warn"><strong>Sin servicios asignados.</strong> Marca en «Servicios que realiza» lo que hace {e.full_name}; si no, la web no le ofrece ninguno.</Alert>}
         <EmployeeForm id={e.id} services={services} initial={{
-          full_name: e.full_name, avatar_url: e.avatar_url, phone: e.phone, email: e.email, specialty: e.specialty, bio: e.bio,
+          full_name: e.full_name, employee_number: e.employee_number ?? null, avatar_url: e.avatar_url, phone: e.phone, email: e.email, specialty: e.specialty, bio: e.bio,
           commission_pct: e.commission_pct == null ? null : Number(e.commission_pct), base_salary: Number(e.base_salary ?? 0), active: e.active, accepts_online_booking: e.accepts_online_booking,
           birth_month: e.birth_month, birth_day: e.birth_day,
           service_ids: (links ?? []).map((l) => l.service_id),

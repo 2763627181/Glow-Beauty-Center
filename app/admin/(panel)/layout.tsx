@@ -4,6 +4,7 @@ import { AdminProvider } from "@/components/admin/AdminContext";
 import { AdminShell, type NavItem } from "@/components/admin/AdminShell";
 import { getSession } from "@/lib/auth";
 import { loadAdminData } from "@/lib/data/admin";
+import { prioritize } from "@/lib/domain/sections";
 import { can, type Area } from "@/lib/permissions";
 import { createClient } from "@/lib/supabase/server";
 
@@ -33,7 +34,8 @@ const NAV: (NavItem & { area: Area })[] = [
 export default async function PanelLayout({ children }: LayoutProps<"/admin">) {
   const session = await getSession();
   if (!session) redirect("/admin/logout");
-  const items = NAV.filter((n) => can(session.role, n.area)).map(({ href, label }) => ({ href, label }));
+  // Caja, Manicuristas, Clientes, Nómina y Servicios van de primeras (en ese orden); el resto como siempre
+  const items = prioritize(NAV.filter((n) => can(session.role, n.area)).map(({ href, label }) => ({ href, label })));
 
   const [data, notifications] = await Promise.all([
     loadAdminData(session),

@@ -10,6 +10,7 @@ import u from "@/components/admin/ui.module.css";
 import { requireAccess } from "@/lib/auth";
 import { normalizeSettings } from "@/lib/domain/settings";
 import { mergeTemplates } from "@/lib/domain/whatsappTemplates";
+import { staffLabel } from "@/lib/domain/staffLabel";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata = { title: "Configuración" };
@@ -47,12 +48,12 @@ async function HorariosTab({ hours }: { hours: ReturnType<typeof normalizeSettin
   const sb = await createClient();
   const [{ data: blocks }, { data: staff }] = await Promise.all([
     sb.from("schedule_blocks").select("*").gte("ends_at", new Date().toISOString()).order("starts_at"),
-    sb.from("employees").select("id,full_name").eq("active", true).order("display_order"),
+    sb.from("employees").select("id,full_name,employee_number").eq("active", true).order("display_order").order("employee_number", { nullsFirst: false }).order("full_name"),
   ]);
   return (
     <div className={u.grid}>
       <HoursForm initial={hours} />
-      <BlocksForm blocks={blocks ?? []} staff={staff ?? []} />
+      <BlocksForm blocks={blocks ?? []} staff={(staff ?? []).map((e) => ({ id: e.id, full_name: staffLabel(e.full_name, e.employee_number) }))} />
     </div>
   );
 }

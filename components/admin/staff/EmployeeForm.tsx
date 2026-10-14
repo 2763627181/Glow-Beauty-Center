@@ -34,6 +34,8 @@ export function EmployeeForm({ id, initial, services }: { id: string | null; ini
       <section className={`${u.card} ${u.form2}`}>
         <h2 className={u.span2}>Datos</h2>
         <div className={u.field}><label htmlFor="e-name">Nombre</label><input id="e-name" value={f.full_name} onChange={(e) => set({ full_name: e.target.value })} required /></div>
+        <div className={u.field}><label htmlFor="e-num">Número (00 a 99)</label><NumInput id="e-num" integer min={0} max={99} value={f.employee_number ?? null} onValue={(v) => set({ employee_number: v })} aria-describedby="e-num-hint" />
+          <span id="e-num-hint" className={u.hint}>Identifica a la especialista en el panel: «02 · Nombre». No se repite entre especialistas y no se muestra en la página pública.</span></div>
         <div className={u.field}><label htmlFor="e-spec">Especialidad</label><input id="e-spec" value={f.specialty ?? ""} onChange={(e) => set({ specialty: e.target.value })} aria-describedby="e-spec-hint" /><span id="e-spec-hint" className={u.hint}>Si dice «Manicurista», aparece en el apartado Manicuristas con su sueldo y su porcentaje.</span></div>
         <div className={u.field}><label htmlFor="e-ph">Teléfono</label><input id="e-ph" type="tel" value={f.phone ?? ""} onChange={(e) => set({ phone: e.target.value })} /></div>
         <div className={u.field}><label htmlFor="e-em">Correo</label><input id="e-em" type="email" value={f.email ?? ""} onChange={(e) => set({ email: e.target.value })} /></div>

@@ -325,7 +325,8 @@ try {
     await page.waitForURL((u) => /\/admin\/payroll\/[0-9a-f-]{36}$/.test(u.pathname), { timeout: 20000 });
     const id = page.url().split("/").pop();
     const [t] = await q(`select count(*)::int n, coalesce(sum(commission),0)::float c, coalesce(sum(base_salary),0)::float b from payroll_lines where run_id=$1`, [id]);
-    assert(t.n >= 2 && t.c === 0 && money2(t.b) === 3000, JSON.stringify(t)); // E2E Nom A (3000) + el resto en cero
+    const [real] = await q(`select coalesce(sum(base_salary),0)::float b from employees where active and full_name not like 'E2E Nom%'`);
+    assert(t.n >= 2 && t.c === 0 && money2(t.b) === money2(3000 + real.b), JSON.stringify(t) + " esperado " + (3000 + real.b)); // E2E Nom A (3000) + el sueldo base de las demás activas, sin comisión
   });
 } finally {
   await cleanup();

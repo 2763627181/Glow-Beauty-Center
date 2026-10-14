@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAccess } from "@/lib/auth";
 import { isValidBirthday } from "@/lib/domain/birthday";
+import { friendlyError } from "@/lib/domain/errors";
 import { normalizeSettings } from "@/lib/domain/settings";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -12,6 +13,7 @@ import type { ActionResult } from "./appointments";
 
 const employeeSchema = z.object({
   full_name: z.string().trim().min(2, "Nombre requerido").max(80),
+  employee_number: z.number("El número no es válido").int("El número debe ser entero").min(0, "El número debe estar entre 0 y 99").max(99, "El número debe estar entre 0 y 99").nullish(),
   avatar_url: z.string().url().nullish(), phone: z.string().max(30).nullish(), email: z.union([z.literal(""), z.email("Correo no válido")]).nullish(),
   specialty: z.string().max(80).nullish(), bio: z.string().max(600).nullish(),
   commission_pct: z.number().min(0).max(100).nullish(), base_salary: z.number().min(0, "El sueldo base no puede ser negativo").max(10_000_000, "Sueldo base demasiado grande").nullish(), active: z.boolean(), accepts_online_booking: z.boolean(),
@@ -27,11 +29,11 @@ export async function saveEmployee(id: string | null, input: EmployeeInput): Pro
   if (!p.success) return { ok: false, error: p.error.issues[0].message };
   const { service_ids, ...row } = p.data;
   const sb = await createClient();
-  const payload = { ...row, email: row.email || null, birth_month: row.birth_month ?? null, birth_day: row.birth_day ?? null, base_salary: row.base_salary ?? 0 };
+  const payload = { ...row, employee_number: row.employee_number ?? null, email: row.email || null, birth_month: row.birth_month ?? null, birth_day: row.birth_day ?? null, base_salary: row.base_salary ?? 0 };
   const { data, error } = id
     ? await sb.from("employees").update(payload).eq("id", id).select("id").single()
     : await sb.from("employees").insert(payload).select("id").single();
-  if (error) return { ok: false, error: "No se pudo guardar." };
+  if (error) return { ok: false, error: friendlyError(error.message, "No se pudo guardar.") };
   if (!id) await seedDefaultSchedule(sb, data.id);
   // Diferencias en vez de borrar todo y reinsertar: si algo falla a medias, la especialista no pierde sus servicios.
   const { data: current } = await sb.from("employee_services").select("service_id").eq("employee_id", data.id);

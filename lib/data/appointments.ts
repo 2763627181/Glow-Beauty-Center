@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { staffLabel } from "@/lib/domain/staffLabel";
 import { applyClientSearch, cleanTerm } from "./client-search";
 import { fetchAll } from "./paginate";
 import type { AppointmentSource, AppointmentStatus } from "@/types/domain";
@@ -93,6 +94,9 @@ export async function getAppointment(id: string) {
 
 export async function listStaffOptions() {
   const sb = await createClient();
-  const { data } = await sb.from("employees").select("id,full_name,active").order("display_order");
-  return (data ?? []) as { id: string; full_name: string; active: boolean }[];
+  const full = await sb.from("employees").select("id,full_name,active,employee_number").order("display_order").order("employee_number", { nullsFirst: false }).order("full_name");
+  const rows: { id: string; full_name: string; active: boolean; employee_number?: number | null }[] = !full.error
+    ? full.data ?? []
+    : (await sb.from("employees").select("id,full_name,active").order("display_order").order("full_name")).data ?? [];
+  return rows.map((r) => ({ id: r.id, full_name: r.full_name, active: r.active, label: staffLabel(r.full_name, r.employee_number ?? null) }));
 }

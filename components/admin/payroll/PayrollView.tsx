@@ -7,6 +7,7 @@ import { addPayrollLine, deletePayroll, markPayrollPaid, recalculatePayroll, rem
 import type { PayrollLine, PayrollRun } from "@/lib/data/payroll";
 import { netOf, round2 } from "@/lib/domain/payroll";
 import { fmtDate, money } from "@/lib/format";
+import { useAdmin } from "../AdminContext";
 import { ExportMenu } from "../ExportMenu";
 import { Kpi } from "../KpiCard";
 import { NumInput } from "../NumInput";
@@ -20,6 +21,8 @@ const day = (d: string) => fmtDate(`${d}T12:00:00-04:00`, { day: "numeric", mont
 type Props = { run: PayrollRun; lines: PayrollLine[]; candidates: { id: string; name: string }[]; today: string };
 
 export function PayrollView({ run, lines, candidates, today }: Props) {
+  const { staff } = useAdmin();
+  const who = (l: PayrollLine) => staff.find((s) => s.id === l.employee_id)?.label ?? l.employee_name;
   const router = useRouter();
   const toast = useToast();
   const [pending, start] = useTransition();
@@ -74,7 +77,7 @@ export function PayrollView({ run, lines, candidates, today }: Props) {
               <tbody>
                 {lines.map((l) => (
                   <tr key={l.id}>
-                    <td data-label="Especialista"><strong>{l.employee_name}</strong>{l.notes && <><br /><span className={u.hint}>{l.notes}</span></>}</td>
+                    <td data-label="Especialista"><strong>{who(l)}</strong>{l.notes && <><br /><span className={u.hint}>{l.notes}</span></>}</td>
                     <td data-label="Servicios" className={u.num}>{l.services_count}</td>
                     <td data-label="Ventas" className={u.num}>{money(l.sales_total)}</td>
                     <td data-label="Comisión" className={u.num}>{money(l.commission)}</td>

@@ -8,6 +8,7 @@ import { requireAccess } from "@/lib/auth";
 import { getManicurists } from "@/lib/data/manicurists";
 import { currentPeriod, isFuture, parsePeriod, periodLabel, periodShort, shiftPeriod, type ManiLine, type ManiSummary, type Period, type PeriodKind } from "@/lib/domain/manicurists";
 import { fmtDate, fmtTime, money, todayISO } from "@/lib/format";
+import { staffLabel } from "@/lib/domain/staffLabel";
 
 export const metadata = { title: "Manicuristas" };
 
@@ -73,7 +74,7 @@ export default async function ManicuristsPage({ searchParams }: PageProps<"/admi
           {list.map((m) => (
             <section key={m.employeeId} className={u.card} aria-labelledby={`mani-${m.employeeId}`}>
               <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}>
-                <h2 id={`mani-${m.employeeId}`} style={{ marginBottom: 4 }}>{m.name}{!m.active && <span className={`${u.badge} ${u.gray}`} style={{ marginLeft: 8 }}>Inactiva</span>}</h2>
+                <h2 id={`mani-${m.employeeId}`} style={{ marginBottom: 4 }}>{staffLabel(m.name, m.number)}{!m.active && <span className={`${u.badge} ${u.gray}`} style={{ marginLeft: 8 }}>Inactiva</span>}</h2>
                 <Link className={u.link} href={`/admin/staff/${m.employeeId}`}>Editar sueldo y porcentaje</Link>
               </div>
               <p className={u.sub} style={{ marginBottom: 12 }}>

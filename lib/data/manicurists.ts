@@ -10,9 +10,9 @@ export async function getManicurists(period: Period, onlyPaid: boolean): Promise
   const sb = await createClient();
   const [sales, { data: emps }] = await Promise.all([
     loadSales(drToISO(from, "00:00"), drToISO(to, "00:00")),
-    sb.from("employees").select("id,full_name,active,specialty,base_salary,commission_pct"),
+    sb.from("employees").select("id,full_name,active,specialty,base_salary,commission_pct,employee_number"),
   ]);
   return buildManicurists(sales, (emps ?? []).map((e) => ({
-    id: e.id, full_name: e.full_name, active: e.active, specialty: e.specialty, base_salary: Number(e.base_salary ?? 0), commission_pct: e.commission_pct == null ? null : Number(e.commission_pct),
+    id: e.id, full_name: e.full_name, active: e.active, specialty: e.specialty, base_salary: Number(e.base_salary ?? 0), commission_pct: e.commission_pct == null ? null : Number(e.commission_pct), employee_number: e.employee_number,
   })), { onlyPaid, salaryFactor: salaryFactor(period.kind) });
 }

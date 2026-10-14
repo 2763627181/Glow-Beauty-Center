@@ -11,7 +11,7 @@ const plain = (s: string | null | undefined) => (s ?? "").normalize("NFD").repla
 /** Es manicurista quien tiene «manicurista» (o «manicure») en su especialidad. Así las dos de hoy aparecen solas y las nuevas también. */
 export const isManicurist = (specialty: string | null | undefined) => /manicur/.test(plain(specialty));
 
-export type ManiEmployee = { id: string; full_name: string; active: boolean; specialty: string | null; base_salary: number; commission_pct: number | null };
+export type ManiEmployee = { id: string; full_name: string; active: boolean; specialty: string | null; base_salary: number; commission_pct: number | null; employee_number?: number | null };
 
 export type ManiLine = {
   /** Cuándo se completó la venta (ISO). */
@@ -39,6 +39,8 @@ export type ManiLine = {
 export type ManiSummary = {
   employeeId: string;
   name: string;
+  /** Número de la especialista (00, 01…), si tiene. */
+  number: number | null;
   active: boolean;
   /** Sueldo fijo del período (una quincena, o dos quincenas si se mira el mes completo). */
   salary: number;
@@ -104,13 +106,13 @@ export function buildManicurists(sales: SaleIn[], employees: ManiEmployee[], opt
       const counted = ls.filter((l) => l.counts), pending = ls.filter((l) => !l.counts);
       const commission = round2(counted.reduce((t, l) => t + l.commission, 0));
       return {
-        employeeId: e.id, name: e.full_name, active: e.active, salary: round2(e.base_salary * factor), salaryPerPay: round2(e.base_salary), pct: e.commission_pct,
+        employeeId: e.id, name: e.full_name, number: e.employee_number ?? null, active: e.active, salary: round2(e.base_salary * factor), salaryPerPay: round2(e.base_salary), pct: e.commission_pct,
         services: counted.length, charged: round2(counted.reduce((t, l) => t + l.total, 0)),
         pendingServices: pending.length, pendingAmount: round2(pending.reduce((t, l) => t + l.total, 0)),
         commission, payable: round2(e.base_salary * factor + commission), missingPct: missing.has(e.id), lines: ls,
       };
     })
-    .sort((a, b) => a.name.localeCompare(b.name, "es"));
+    .sort((a, b) => (a.number ?? 1000) - (b.number ?? 1000) || a.name.localeCompare(b.name, "es"));
 }
 
 /* ───────── Quincenas y mes ───────── */

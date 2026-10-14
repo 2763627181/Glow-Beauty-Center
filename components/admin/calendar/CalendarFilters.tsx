@@ -4,7 +4,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { STATUS_META } from "@/lib/domain/status";
 import u from "../ui.module.css";
 
-export function CalendarFilters({ employees, services }: { employees: { id: string; full_name: string }[]; services: { id: string; name: string }[] }) {
+export function CalendarFilters({ employees, services }: { employees: { id: string; full_name: string; label?: string }[]; services: { id: string; name: string }[] }) {
   const router = useRouter();
   const path = usePathname();
   const sp = useSearchParams();
@@ -24,7 +24,7 @@ export function CalendarFilters({ employees, services }: { employees: { id: stri
   );
   return (
     <div className={u.filters}>
-      {sel("c-emp", "Todos los especialistas", "employee", employees.map((e) => [e.id, e.full_name]))}
+      {sel("c-emp", "Todos los especialistas", "employee", employees.map((e) => [e.id, e.label ?? e.full_name]))}
       {sel("c-svc", "Todos los servicios", "service", services.map((x) => [x.id, x.name]))}
       {sel("c-st", "Todos los estados", "status", Object.entries(STATUS_META).map(([k, v]) => [k, v.label]))}
     </div>

@@ -72,7 +72,7 @@ export function AdminShell({ items, user, notifications, children }: {
         <div className={s.content}>
           <div className={s.top}>
             <button className={`${s.iconBtn} ${s.burger}`} onClick={() => setOpen(true)} aria-label="Abrir menú"><MenuIcon /></button>
-            <GlobalSearch />
+            <GlobalSearch sections={items} />
             {canSeeBell ? <NotificationBell initial={notifications} /> : <span />}
           </div>
           <main className={s.main} id="contenido">{children}</main>

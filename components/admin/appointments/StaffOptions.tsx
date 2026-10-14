@@ -1,6 +1,6 @@
 import { staffChoices } from "./lines";
 
-type Staff = { id: string; full_name: string; active: boolean };
+type Staff = { id: string; full_name: string; active: boolean; label?: string };
 type Link = { employee_id: string; service_id: string };
 
 /**
@@ -9,7 +9,7 @@ type Link = { employee_id: string; service_id: string };
  */
 export function StaffOptions({ serviceId, staff, links }: { serviceId: string | null | undefined; staff: Staff[]; links: Link[] }) {
   const { usual, others } = staffChoices(serviceId, staff, links);
-  const opt = (s: Staff) => <option key={s.id} value={s.id}>{s.full_name}</option>;
+  const opt = (s: Staff) => <option key={s.id} value={s.id}>{s.label ?? s.full_name}</option>;
   if (!others.length) return <>{usual.map(opt)}</>;
   if (!usual.length) return <>{others.map(opt)}</>;
   return (

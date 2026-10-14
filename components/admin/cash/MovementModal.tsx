@@ -61,7 +61,7 @@ export function MovementModal({ kind, expected, preset, onClose }: { kind: MoveK
             <label htmlFor="mv-emp">Especialista</label>
             <select id="mv-emp" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
               <option value="">Elegir…</option>
-              {people.map((s) => <option key={s.id} value={s.id}>{s.full_name}</option>)}
+              {people.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
             </select>
           </div>
         )}

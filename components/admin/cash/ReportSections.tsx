@@ -6,6 +6,7 @@ import {
   buildTimeline, cashEffect, changeOf, MOVE_LABEL, splitProduction, type CashMethodRow, type CashMovement, type ProductionRow, type TimelineRow, type CashReport,
 } from "@/lib/domain/cash";
 import { fmtTime, fmtDate, money } from "@/lib/format";
+import { useAdmin } from "../AdminContext";
 import { EmptyState } from "../primitives";
 import u from "../ui.module.css";
 import c from "./cash.module.css";
@@ -14,22 +15,29 @@ const signed = (n: number) => (n > 0 ? `+ ${money(n)}` : n < 0 ? `− ${money(Ma
 const stamp = (iso: string) => `${fmtDate(iso, { day: "numeric", month: "short" })} ${fmtTime(iso)}`;
 
 /** Cobros, reembolsos y movimientos de efectivo del turno, en orden. */
+/** Nombre de la especialista con su número («02 · Nombre») si está en la lista del panel. */
+function useStaffLabel() {
+  const { staff } = useAdmin();
+  return (id: string | null, name: string | null) => (id ? staff.find((s) => s.id === id)?.label : undefined) ?? name;
+}
+
 export function Timeline({ report, onVoid }: { report: Pick<CashReport, "payments" | "movements">; onVoid?: (m: CashMovement) => void }) {
   const rows = buildTimeline(report);
+  const who = useStaffLabel();
   if (!rows.length) return <EmptyState title="Sin movimientos todavía" text="Aquí aparecen los cobros, reembolsos y las entradas y salidas de efectivo." />;
   return (
     <div className={u.tableWrap} role="region" aria-label="Tabla de movimientos del turno" tabIndex={0}>
       <table className={`${u.table} ${u.stack}`}>
         <thead><tr><th>Hora</th><th>Concepto</th><th>Detalle</th><th className={u.num}>Monto</th><th className={u.num}>En la caja</th><th><span className="sr-only">Acciones</span></th></tr></thead>
         <tbody>
-          {rows.map((r) => <TimelineLine key={r.key} row={r} onVoid={onVoid} />)}
+          {rows.map((r) => <TimelineLine key={r.key} row={r} onVoid={onVoid} who={who} />)}
         </tbody>
       </table>
     </div>
   );
 }
 
-function TimelineLine({ row, onVoid }: { row: TimelineRow; onVoid?: (m: CashMovement) => void }) {
+function TimelineLine({ row, onVoid, who }: { row: TimelineRow; onVoid?: (m: CashMovement) => void; who: (id: string | null, name: string | null) => string | null }) {
   const effect = cashEffect(row);
   if (row.type === "movimiento") {
     const m = row.movement;
@@ -38,7 +46,7 @@ function TimelineLine({ row, onVoid }: { row: TimelineRow; onVoid?: (m: CashMove
         <td data-label="Hora">{stamp(row.at)}</td>
         <td data-label="Concepto"><span className={`${c.tag} ${m.kind === "entrada" ? c.tagIn : c.tagOut}`}>{m.kind === "entrada" ? "Entrada" : "Salida"}</span> <span className={m.voided_at ? c.struck : undefined}>{MOVE_LABEL[m.category]}</span></td>
         <td data-label="Detalle">
-          <span className={m.voided_at ? c.struck : undefined}>{[m.employee_name, m.description].filter(Boolean).join(" · ") || "—"}</span>
+          <span className={m.voided_at ? c.struck : undefined}>{[who(m.employee_id, m.employee_name), m.description].filter(Boolean).join(" · ") || "—"}</span>
           {m.by && <small className={`${c.muted} ${u.hint}`}> · {m.by}</small>}
           {m.voided_at && <div className={u.hint}>Anulado: {m.void_reason}</div>}
         </td>
@@ -95,6 +103,7 @@ export function MethodsTable({ methods }: { methods: CashMethodRow[] }) {
 
 /** Producción de cada especialista en el turno: lo que se queda ella, lo que paga al salón y lo que ya se le entregó desde la caja. */
 export function ProductionTable({ rows, onPay }: { rows: ProductionRow[]; onPay?: (r: ProductionRow, toPay: number) => void }) {
+  const who = useStaffLabel();
   if (!rows.length) return <EmptyState title="Sin ventas en este turno" text="Cuando se completen servicios aparece aquí lo que produjo cada especialista." />;
   return (
     <div className={u.tableWrap} role="region" aria-label="Tabla de producción por especialista" tabIndex={0}>
@@ -109,7 +118,7 @@ export function ProductionTable({ rows, onPay }: { rows: ProductionRow[]; onPay?
             return (
               <tr key={r.employee_id ?? "none"}>
                 <td data-label="Especialista">
-                  {r.name}
+                  {who(r.employee_id, r.name)}
                   {noPct && <div className={u.hint}>{r.employee_id ? "Falta su porcentaje en su ficha" : "Sin especialista: no se reparte"}</div>}
                 </td>
                 <td data-label="Servicios" className={u.num}>{r.services}</td>

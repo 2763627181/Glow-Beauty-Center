@@ -135,15 +135,20 @@ try {
   });
 
   section("Las manicuristas reales");
-  await step("Mayra y María aparecen con 7,000 por quincena (14,000 al mes) y 15 %, sin avisos de configuración", async () => {
+  await step("Las manicuristas reales (las que están en la base) aparecen con su sueldo por quincena y su porcentaje", async () => {
+    // Se leen de la base (el dueño puede cambiarles el nombre, el número, el sueldo o el porcentaje): la pantalla debe mostrar exactamente eso
+    const real = await q(`select full_name, employee_number n, base_salary::float s, commission_pct::float p from employees where active and specialty ilike '%manicur%' and full_name not like 'E2E%'`);
+    assert(real.length > 0, "debe haber al menos una manicurista real");
+    const money = (v) => "RD$ " + v.toLocaleString("en-US", { minimumFractionDigits: Number.isInteger(v) ? 0 : 2, maximumFractionDigits: 2 });
     await page.goto(`${BASE}/admin/manicurists`);
-    for (const n of ["Mayra", "MARIA NOVAS"]) {
-      const c = card(n);
-      await expectVisible(c, `tarjeta de ${n}`);
+    for (const e of real) {
+      const c = card(e.full_name);
+      await expectVisible(c, `tarjeta de ${e.full_name}`);
       const t = await c.innerText();
-      assert(t.includes("Sueldo fijo RD$ 7,000 por quincena (RD$ 14,000 al mes)") && t.includes("gana el 15%"), `${n}: 7,000 por quincena y 15 % (${t.slice(0, 200).replace(/\s+/g, " ")})`);
-      assert(t.includes("Sueldo de la quincena") && t.includes("RD$ 7,000 de sueldo +"), `${n}: el total de la quincena parte de 7,000`);
-      assert(!t.includes("Falta su porcentaje") && !t.includes("No tiene sueldo fijo"), `${n}: no debe pedir configuración`);
+      assert(t.includes(`Sueldo fijo ${money(e.s)} por quincena (${money(e.s * 2)} al mes)`), `${e.full_name}: sueldo por quincena (${t.slice(0, 220).replace(/\s+/g, " ")})`);
+      if (e.p != null) assert(t.includes(`gana el ${e.p}%`), `${e.full_name}: porcentaje ${e.p}%`);
+      assert(t.includes("Sueldo de la quincena") && t.includes(`${money(e.s)} de sueldo +`), `${e.full_name}: el total de la quincena parte de su sueldo`);
+      if (e.n != null) assert(t.includes(`${String(e.n).padStart(2, "0")} · ${e.full_name}`), `${e.full_name}: lleva su número`);
     }
   });
 

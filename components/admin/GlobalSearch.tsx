@@ -3,10 +3,15 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { globalSearch, type SearchResults } from "@/lib/actions/admin/search";
+import { matchSections } from "@/lib/domain/sections";
 import s from "./GlobalSearch.module.css";
 
-/** Buscador global (atajo: “/”). Encuentra clientes, citas y ventas desde cualquier pantalla. */
-export function GlobalSearch() {
+/**
+ * Buscador global (atajo: “/”). Encuentra clientes, citas y ventas desde cualquier pantalla y lleva a las secciones del panel
+ * (en el mismo orden del menú: Caja, Manicuristas, Clientes, Nómina y Servicios primero). Al hacer clic en el buscador sin escribir
+ * muestra las secciones.
+ */
+export function GlobalSearch({ sections = [] }: { sections?: { href: string; label: string }[] }) {
   const [q, setQ] = useState("");
   const [res, setRes] = useState<SearchResults | null>(null);
   const [open, setOpen] = useState(false);
@@ -37,21 +42,25 @@ export function GlobalSearch() {
   }, []);
 
   const close = () => { setOpen(false); setQ(""); };
-  const empty = res && !res.clients.length && !res.appointments.length && !res.sales.length;
+  const found = matchSections(sections, q);
+  const shown = q.trim() ? found : sections.slice(0, 8); // sin texto: las primeras del menú
+  const searching = q.trim().length >= 2;
+  const empty = searching && res && !res.clients.length && !res.appointments.length && !res.sales.length && !found.length;
   return (
     <div className={s.box} ref={box} role="search">
-      <label className="sr-only" htmlFor="gsearch">Buscar clientes, citas o ventas</label>
-      <input ref={input} id="gsearch" className={s.input} type="search" placeholder="Buscar cliente, cita o venta…" aria-keyshortcuts="/" autoComplete="off" value={q} onFocus={() => setOpen(true)} onChange={(e) => { setQ(e.target.value); setOpen(true); }} />
+      <label className="sr-only" htmlFor="gsearch">Buscar clientes, citas, ventas o secciones del panel</label>
+      <input ref={input} id="gsearch" className={s.input} type="search" placeholder="Buscar cliente, cita, venta o sección…" aria-keyshortcuts="/" autoComplete="off" value={q} onFocus={() => setOpen(true)} onChange={(e) => { setQ(e.target.value); setOpen(true); }} />
       <kbd className={s.kbd} aria-hidden="true">/</kbd>
-      {open && q.trim().length >= 2 && (
+      {open && (searching || shown.length > 0) && (
         <div className={s.panel} aria-live="polite">
-          {busy && !res && <p className={s.note}>Buscando…</p>}
+          {shown.length > 0 && <section aria-label="Secciones del panel"><h3>Ir a</h3>{shown.map((x) => <Link key={x.href} href={x.href} onClick={close}><strong>{x.label}</strong></Link>)}</section>}
+          {searching && busy && !res && <p className={s.note}>Buscando…</p>}
           {empty && <p className={s.note}>Sin resultados para “{q}”.</p>}
-          {res && res.clients.length > 0 && (
+          {searching && res && res.clients.length > 0 && (
             <section><h3>Clientes</h3>{res.clients.map((c) => <Link key={c.id} href={`/admin/clients/${c.id}`} onClick={close}><strong>{c.name}</strong><small>{c.phone}</small></Link>)}</section>
           )}
-          {res && res.appointments.length > 0 && <section><h3>Citas</h3>{res.appointments.map((a) => <Link key={a.id} href={`/admin/appointments/${a.id}`} onClick={close}><strong>{a.title}</strong><small>{a.sub}</small></Link>)}</section>}
-          {res && res.sales.length > 0 && <section><h3>Ventas</h3>{res.sales.map((x) => <Link key={x.id} href={`/admin/sales/${x.id}`} onClick={close}><strong>{x.title}</strong><small>{x.sub}</small></Link>)}</section>}
+          {searching && res && res.appointments.length > 0 && <section><h3>Citas</h3>{res.appointments.map((a) => <Link key={a.id} href={`/admin/appointments/${a.id}`} onClick={close}><strong>{a.title}</strong><small>{a.sub}</small></Link>)}</section>}
+          {searching && res && res.sales.length > 0 && <section><h3>Ventas</h3>{res.sales.map((x) => <Link key={x.id} href={`/admin/sales/${x.id}`} onClick={close}><strong>{x.title}</strong><small>{x.sub}</small></Link>)}</section>}
         </div>
       )}
     </div>

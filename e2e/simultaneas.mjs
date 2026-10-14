@@ -149,7 +149,7 @@ try {
     await page.locator("#n-when").fill(`${DAY}T15:00`);
     await dialog().locator("label", { hasText: /^Tinte\s*RD\$/ }).locator("input").check();
     const grupo = page.getByRole("group", { name: "Especialistas para Tinte" });
-    const hacen = (await q(`select e.full_name from employee_services es join employees e on e.id=es.employee_id join services s on s.id=es.service_id where s.name='Tinte' and e.active`)).map((r) => r.full_name).sort();
+    const hacen = (await q(`select e.full_name, e.employee_number n from employee_services es join employees e on e.id=es.employee_id join services s on s.id=es.service_id where s.name='Tinte' and e.active`)).map((r) => (r.n == null ? r.full_name : `${String(r.n).padStart(2, "0")} · ${r.full_name}`)).sort();
     assert(hacen.length > 0, "alguien debe tener marcado Tinte");
     const nombres = (await grupo.locator("label").allTextContents()).map((t) => t.trim());
     const pos = (n) => nombres.indexOf(n);

@@ -64,7 +64,7 @@ export function addTeammate(lines: EditLine[], i: number, key: string = newKey()
 }
 
 /** Especialistas que pueden hacer un servicio: los vinculados, o todos los activos si no hay vínculos. */
-export function eligibleStaff(serviceId: string | null | undefined, staff: { id: string; full_name: string; active: boolean }[], links: { employee_id: string; service_id: string }[]) {
+export function eligibleStaff<T extends { id: string; full_name: string; active: boolean }>(serviceId: string | null | undefined, staff: T[], links: { employee_id: string; service_id: string }[]) {
   const active = staff.filter((s) => s.active);
   if (!serviceId) return active;
   const linked = links.filter((l) => l.service_id === serviceId).map((l) => l.employee_id);
@@ -72,7 +72,7 @@ export function eligibleStaff(serviceId: string | null | undefined, staff: { id:
 }
 
 /** Para el selector de especialista: las que tienen el servicio marcado y, aparte, el resto de las activas (el personal puede asignar a cualquiera). */
-export function staffChoices(serviceId: string | null | undefined, staff: { id: string; full_name: string; active: boolean }[], links: { employee_id: string; service_id: string }[]) {
+export function staffChoices<T extends { id: string; full_name: string; active: boolean }>(serviceId: string | null | undefined, staff: T[], links: { employee_id: string; service_id: string }[]) {
   const usual = eligibleStaff(serviceId, staff, links);
   const ids = new Set(usual.map((s) => s.id));
   return { usual, others: staff.filter((s) => s.active && !ids.has(s.id)) };

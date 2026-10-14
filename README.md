@@ -90,7 +90,7 @@ Los permisos se **imponen en la base de datos** (RLS y funciones SQL), no solo e
 | Módulo | Qué puedes crear / editar / eliminar |
 |---|---|
 | **Servicios** | servicios (precio, duración, tiempos antes/después, comisión, foto, “desde”, destacado, consulta previa, especialistas que lo hacen), **variantes** (largo del cabello…), **complementos**, categorías (con foto), productos de venta; duplicar, ordenar, activar/ocultar. Los que ya tienen historial se archivan para no perder reportes |
-| **Especialistas** | datos, foto, biografía, comisión, sueldo base, **cumpleaños** (día y mes; ese día llega una notificación), servicios (con «Marcar todos» por categoría), horario semanal con almuerzo, ausencias/vacaciones, orden, cuenta de acceso. Una especialista nueva nace con el horario del negocio y el panel avisa si le falta horario o servicios |
+| **Especialistas** | **número** (00 a 99; se ve como «02 · Nombre» en todo el panel y no se repite), datos, foto, biografía, comisión, sueldo base, **cumpleaños** (día y mes; ese día llega una notificación), servicios (con «Marcar todos» por categoría), horario semanal con almuerzo, ausencias/vacaciones, orden, cuenta de acceso. Una especialista nueva nace con el horario del negocio y el panel avisa si le falta horario o servicios |
 | **Manicuristas** | sueldo fijo por quincena + porcentaje de los servicios que realizan, con el detalle de cada servicio, cliente y monto, y el total a pagar de la quincena (o del mes); exportable. Ver más abajo |
 | **Caja** | turnos de caja (fondo inicial, cobros en efectivo con **vuelto**, tarjeta y transferencia que se cobran aparte, entradas y salidas de efectivo, pago a especialistas, cierre con diferencia), la producción de cada especialista con lo que **paga al salón**, y el reporte de cada cierre en Excel, PDF y CSV. Ver más abajo |
 | **Nómina** | pago por período (quincena, mes, semana o fechas propias): ventas, **comisión**, propinas, sueldo base, bonos y descuentos de cada especialista; borrador editable → pagada (queda congelada); volante de pago y nómina completa en Excel, PDF y CSV. Ver más abajo |
@@ -122,6 +122,12 @@ Cada exportación sale del mismo documento, así que los tres formatos siempre c
 - **PDF:** portada con indicadores, tablas con encabezado de color, estados en color, barras de porcentaje, totales y «Página X de Y». Muestra hasta 2,500 filas por tabla; el Excel y el CSV traen todo.
 - **CSV:** una tabla limpia para importar en otros programas (el reporte completo trae todas las secciones). Va con BOM para que Excel respete las tildes y protegido contra fórmulas maliciosas.
 - Los reportes y listados leen **todas** las filas del período (antes Supabase los cortaba en 1,000).
+
+## Menú, buscador y número de especialista
+
+- **Menú:** Caja, Manicuristas, Clientes, Nómina y Servicios van de primeras (en ese orden) y después el resto como siempre; cada rol ve solo las que le tocan.
+- **Buscador de arriba** (atajo «/»): además de clientes, citas y ventas, lleva a las secciones del panel. Al hacer clic sin escribir muestra las primeras; al escribir («caj», «nomina») filtra sin importar tildes ni mayúsculas.
+- **Número de especialista:** en *Especialistas → ficha → Número* (de 0 a 99, no se repite). Con número, la especialista se ve como «01 · Santa Antigua» en la lista de Especialistas, los selectores de citas, la agenda, Manicuristas, Caja y Nómina; sin número, solo el nombre. La página pública siempre muestra solo el nombre (la columna no se le concede al público). La lista se ordena por su orden manual, luego por número y luego por nombre.
 
 ## Manicuristas
 
