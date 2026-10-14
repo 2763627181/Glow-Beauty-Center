@@ -17,6 +17,7 @@ const NAV: (NavItem & { area: Area })[] = [
   { href: "/admin/appointments/board", label: "Tablero", area: "appointments" },
   { href: "/admin/clients", label: "Clientes", area: "clients" },
   { href: "/admin/services", label: "Servicios", area: "services" },
+  { href: "/admin/inventory", label: "Inventario", area: "inventory" },
   { href: "/admin/staff", label: "Especialistas", area: "staff" },
   { href: "/admin/manicurists", label: "Manicuristas", area: "manicurists" },
   { href: "/admin/cash", label: "Caja", area: "cash" },

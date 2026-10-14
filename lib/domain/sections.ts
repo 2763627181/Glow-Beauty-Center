@@ -1,8 +1,8 @@
 /**
  * Orden del menú del panel y del buscador de secciones. Primero las que más se usan (Caja, Manicuristas, Clientes, Nómina y Servicios,
- * en ese orden) y después el resto, en su orden de siempre. Puro, sin I/O.
+ * en ese orden; Inventario, que va con Servicios, justo después) y después el resto, en su orden de siempre. Puro, sin I/O.
  */
-export const PRIORITY_HREFS = ["/admin/cash", "/admin/manicurists", "/admin/clients", "/admin/payroll", "/admin/services"] as const;
+export const PRIORITY_HREFS = ["/admin/cash", "/admin/manicurists", "/admin/clients", "/admin/payroll", "/admin/services", "/admin/inventory"] as const; // Inventario va justo después de Servicios
 
 /** Pone primero las secciones prioritarias (en el orden de PRIORITY_HREFS) y deja las demás como estaban. Solo reordena las que existen. */
 export function prioritize<T extends { href: string }>(items: T[], priority: readonly string[] = PRIORITY_HREFS): T[] {

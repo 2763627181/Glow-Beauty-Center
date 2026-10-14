@@ -890,6 +890,37 @@ try {
   await expectErr("propina: la función de corrección no la puede llamar el personal", "select _exclude_tips_from_totals()", [], "permission denied");
   await asAdmin();
 
+  /* ───────── inventario de productos ───────── */
+  console.log("\n— Inventario —");
+  await asUser(uManager);
+  const supId = (await q("insert into supplies (name, unit, expected_services_per_unit) values ('Pintura de gel (prueba)', 'pote', 8) returning id")).rows[0].id;
+  await q("insert into supply_services (supply_id, service_id) values ($1, $2)", [supId, man]);
+  const lotId = (await q("insert into supply_lots (supply_id, received_on, quantity, unit_cost, supplier) values ($1, '2026-10-01', 10, 450, 'Proveedor X') returning id", [supId])).rows[0].id;
+  check("inventario: el gerente crea productos, sus servicios y sus entradas", (await q("select count(*) c from supply_lots where supply_id=$1", [supId])).rows[0].c === "1");
+  await q("update supply_lots set depleted_on = '2026-10-21' where id=$1", [lotId]);
+  check("inventario: se marca cuándo se agotó", (await q("select depleted_on::text d from supply_lots where id=$1", [lotId])).rows[0].d === "2026-10-21");
+  await expectErr("inventario: no se puede agotar antes de que llegara", "update supply_lots set depleted_on = '2026-09-30' where id=$1", [lotId], "supply_lots_depleted_ck");
+  await expectErr("inventario: la cantidad debe ser mayor que 0", "insert into supply_lots (supply_id, received_on, quantity) values ($1, '2026-10-02', 0)", [supId], "check constraint");
+  await expectErr("inventario: el costo no puede ser negativo", "insert into supply_lots (supply_id, received_on, quantity, unit_cost) values ($1, '2026-10-02', 1, -5)", [supId], "check constraint");
+  await expectErr("inventario: la unidad es una sola palabra", "insert into supplies (name, unit) values ('Otro', 'dos palabras')", [], "check constraint");
+  await expectErr("inventario: el rendimiento esperado debe ser mayor que 0", "insert into supplies (name, unit, expected_services_per_unit) values ('Otro', 'pote', 0)", [], "check constraint");
+  await expectErr("inventario: el nombre no puede quedar vacío", "insert into supplies (name) values ('  ')", [], "check constraint");
+  await expectErr("inventario: un servicio no se repite en el mismo producto", "insert into supply_services (supply_id, service_id) values ($1, $2)", [supId, man], "duplicate key");
+  await asUser(uRecep);
+  check("inventario: recepción NO ve productos ni entradas", (await q("select count(*) c from supplies")).rows[0].c === "0" && (await q("select count(*) c from supply_lots")).rows[0].c === "0" && (await q("select count(*) c from supply_services")).rows[0].c === "0");
+  await expectErr("inventario: recepción NO puede crear productos", "insert into supplies (name) values ('Intruso')", [], "row-level security");
+  await expectErr("inventario: recepción NO puede registrar entradas", "insert into supply_lots (supply_id, received_on, quantity) values ($1, '2026-10-02', 1)", [supId], "row-level security");
+  await asUser(uSpec);
+  check("inventario: el especialista NO lo ve", (await q("select count(*) c from supplies")).rows[0].c === "0");
+  await asAnon();
+  await expectErr("inventario: anon NO lo puede leer", "select count(*) from supplies", [], "permission denied");
+  await asUser(uAdmin);
+  check("inventario: el super administrador sí lo ve", (await q("select count(*) c from supplies where id=$1", [supId])).rows[0].c === "1");
+  await asAdmin();
+  check("inventario: cambios y altas quedan en la auditoría", Number((await q("select count(*) c from audit_logs where entity in ('supplies','supply_lots') and entity_id in ($1, $2)", [supId, lotId])).rows[0].c) >= 3);
+  await q("delete from supplies where id=$1", [supId]);
+  check("inventario: al borrar un producto se van sus entradas y servicios", (await q("select count(*) c from supply_lots where supply_id=$1", [supId])).rows[0].c === "0" && (await q("select count(*) c from supply_services where supply_id=$1", [supId])).rows[0].c === "0");
+
 } catch (e) {
   console.error("ERROR inesperado:", e.message);
   fails++;

@@ -6,7 +6,7 @@ export const ENTITY_LABEL: Record<string, string> = {
   clients: "Clientes", employees: "Especialistas", service_categories: "Categorías", service_variants: "Variantes", service_addons: "Complementos",
   promotions: "Promociones", gallery: "Galería", business_settings: "Configuración", profiles: "Usuarios", payment_methods: "Métodos de pago",
   products: "Productos", schedule_blocks: "Bloqueos", payroll_runs: "Nómina", payroll_lines: "Volantes de nómina",
-  cash_sessions: "Cajas", cash_movements: "Movimientos de caja",
+  cash_sessions: "Cajas", cash_movements: "Movimientos de caja", supplies: "Inventario (productos)", supply_lots: "Inventario (entradas)",
 };
 
 export const ACTION_LABEL: Record<string, string> = {
@@ -22,7 +22,7 @@ const FIELD_LABEL: Record<string, string> = {
   featured: "destacado", image_url: "imagen", label: "etiqueta", value: "valor", quantity: "cantidad", voided_at: "anulada",
   commission: "comisión", tips: "propinas", base_salary: "sueldo base", bonus: "bonos", deductions: "descuentos", net: "neto a pagar",
   sales_total: "ventas", services_count: "servicios", paid_on: "fecha de pago", paid_method: "método de pago", paid_reference: "referencia",
-  period_start: "desde", period_end: "hasta", parallel: "al mismo tiempo que el anterior", team_id: "equipo", birth_month: "mes de cumpleaños", birth_day: "día de cumpleaños", employee_number: "número",
+  period_start: "desde", period_end: "hasta", parallel: "al mismo tiempo que el anterior", team_id: "equipo", birth_month: "mes de cumpleaños", birth_day: "día de cumpleaños", employee_number: "número", unit: "unidad", expected_services_per_unit: "servicios que rinde", received_on: "fecha de entrada", depleted_on: "fecha de agotado", supplier: "proveedor", unit_cost: "costo por unidad",
   tendered: "efectivo recibido", refunded_at: "reembolsado", kind: "tipo", opening_amount: "fondo inicial", is_cash: "es efectivo", void_reason: "motivo de anulación",
   counted_cash: "efectivo contado", expected_cash: "efectivo esperado", difference: "diferencia", closed_at: "cerrada",
 };

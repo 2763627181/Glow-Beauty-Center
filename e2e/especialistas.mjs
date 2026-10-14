@@ -36,7 +36,7 @@ try {
     await page.goto(BASE + "/admin");
     const l = (await navLabels(page)).map((x) => x.trim());
     assert(JSON.stringify(l.slice(0, 5)) === JSON.stringify(["Caja", "Manicuristas", "Clientes", "Nómina", "Servicios"]), `menú: ${l.join(" | ")}`);
-    assert(l[5] === "Dashboard" && l.includes("Especialistas") && l.includes("Ventas") && l.includes("Cobros"), `el resto del menú sigue ahí: ${l.join(" | ")}`);
+    assert(l[5] === "Inventario" && l[6] === "Dashboard" && l.includes("Especialistas") && l.includes("Ventas") && l.includes("Cobros"), `el resto del menú sigue ahí: ${l.join(" | ")}`);
     assert(new Set(l).size === l.length, "no se repite ninguna sección");
   });
 

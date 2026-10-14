@@ -37,6 +37,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   payroll_paid: "Esa nómina ya está pagada. Reábrela si necesitas corregirla.",
   payroll_period_locked: "El período de una nómina no se puede cambiar; elimínala y crea otra.",
   payment_not_refundable: "Ese pago no se puede reembolsar.",
+  supply_lots_depleted_ck: "La fecha de agotado no puede ser anterior a la de entrada.",
   employees_number_uidx: "Ese número ya lo tiene otra especialista. Elige otro.",
   employees_number_ck: "El número debe estar entre 0 y 99.",
   cash_already_open: "Ya hay una caja abierta.",

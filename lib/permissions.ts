@@ -16,6 +16,7 @@ export const PERMISSIONS = {
   staff: ["super_admin", "manager"],
   payroll: ["super_admin", "manager"],
   manicurists: ["super_admin", "manager"],
+  inventory: ["super_admin", "manager"], // productos que se usan en los servicios: entradas, agotados y consumo
   sales: ["super_admin", "manager", "receptionist"],
   payments: ["super_admin", "manager", "receptionist"],
   cash: ["super_admin", "manager", "receptionist"],

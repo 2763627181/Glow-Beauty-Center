@@ -82,7 +82,7 @@ Los permisos se **imponen en la base de datos** (RLS y funciones SQL), no solo e
 | Cobrar, ventas rápidas, ver ventas y cobros | ✔ | ✔ | ✔ | – |
 | **Caja** (abrir y cerrar, entradas y salidas de efectivo, producción por especialista) | ✔ | ✔ | ✔ | – |
 | Anular un movimiento de caja y reabrir un cierre | ✔ | ✔ | – | – |
-| **Nómina de pago** (crear, ajustar, pagar, volantes) y **Manicuristas** | ✔ | ✔ | – | – |
+| **Nómina de pago** (crear, ajustar, pagar, volantes), **Manicuristas** e **Inventario** | ✔ | ✔ | – | – |
 | Anular ventas, reembolsar, eliminar registros, fusionar clientes | ✔ | ✔ | – | – |
 
 ## Qué se edita desde el panel
@@ -91,6 +91,7 @@ Los permisos se **imponen en la base de datos** (RLS y funciones SQL), no solo e
 |---|---|
 | **Servicios** | servicios (precio, duración, tiempos antes/después, comisión, foto, “desde”, destacado, consulta previa, especialistas que lo hacen), **variantes** (largo del cabello…), **complementos**, categorías (con foto), productos de venta; duplicar, ordenar, activar/ocultar. Los que ya tienen historial se archivan para no perder reportes |
 | **Especialistas** | **número** (00 a 99; se ve como «02 · Nombre» en todo el panel y no se repite), datos, foto, biografía, comisión, sueldo base, **cumpleaños** (día y mes; ese día llega una notificación), servicios (con «Marcar todos» por categoría), horario semanal con almuerzo, ausencias/vacaciones, orden, cuenta de acceso. Una especialista nueva nace con el horario del negocio y el panel avisa si le falta horario o servicios |
+| **Inventario** | productos que se usan en los servicios: entradas con fecha, cuándo se agotaron y análisis de consumo por cliente. Ver más abajo |
 | **Manicuristas** | sueldo fijo por quincena + porcentaje de los servicios que realizan, con el detalle de cada servicio, cliente y monto, y el total a pagar de la quincena (o del mes); exportable. Ver más abajo |
 | **Caja** | turnos de caja (fondo inicial, cobros en efectivo con **vuelto**, tarjeta y transferencia que se cobran aparte, entradas y salidas de efectivo, pago a especialistas, cierre con diferencia), la producción de cada especialista con lo que **paga al salón**, y el reporte de cada cierre en Excel, PDF y CSV. Ver más abajo |
 | **Nómina** | pago por período (quincena, mes, semana o fechas propias): ventas, **comisión**, propinas, sueldo base, bonos y descuentos de cada especialista; borrador editable → pagada (queda congelada); volante de pago y nómina completa en Excel, PDF y CSV. Ver más abajo |
@@ -123,9 +124,21 @@ Cada exportación sale del mismo documento, así que los tres formatos siempre c
 - **CSV:** una tabla limpia para importar en otros programas (el reporte completo trae todas las secciones). Va con BOM para que Excel respete las tildes y protegido contra fórmulas maliciosas.
 - Los reportes y listados leen **todas** las filas del período (antes Supabase los cortaba en 1,000).
 
+## Inventario de productos
+
+*Inventario* (menú, justo después de Servicios; super admin y gerente) es el control de los productos que se **usan en los servicios** (shampoo, pintura de gel para manicure, etc. — no son los «productos de venta» de Servicios → Productos).
+
+- **Producto:** nombre, **unidad** de una palabra (pote, botella, caja…), **en qué servicios se usa** y, si quieres, **cuántos servicios rinde una unidad** (por ejemplo, un pote alcanza para 8 manicures).
+- **Entrada:** cada vez que llega un pedido se registra la **fecha en que llegó** y la **cantidad** (y, si quieres, costo y proveedor). Cuando se acaba, se marca **«Se agotó»** con su fecha. Se puede corregir (editar, reabrir una entrada marcada por error, eliminar).
+- **Análisis:** al marcar que se agotó, el sistema cuenta los servicios de ese producto que se hicieron en ese tiempo (ventas no anuladas; un servicio hecho por un equipo cuenta una vez) y escribe, por ejemplo: *«Si 10 clientes utilizaron Manicure y se agotaron 10 potes de Pintura de gel en 20 días, podemos deducir lo siguiente: consumo promedio 1 pote por cliente; duración promedio 1 pote cada 2 días; posible problema: consumo excesivo, desperdicio, uso no registrado o control deficiente del inventario. Conclusión: …»*
+- **Cómo decide si el consumo es normal:** compara los servicios que rindió cada unidad con lo que indicaste (si más de 2 veces peor: «muy elevado»; peor que 0.8: «elevado»; parecido: «normal»; mejor: «rinde más de lo esperado»). Sin ese dato compara con el promedio de las otras entradas ya agotadas, y la primera entrada se considera elevada si gasta una unidad o más por servicio. Si se agota sin ningún servicio registrado, pide investigar.
+- **Entrada en uso:** muestra cuántos días lleva y cuántos servicios se han hecho y, con referencia, cuánto se estima que queda y para cuántos días.
+- **Entradas en orden:** las entradas se gastan en orden de llegada: una nueva que llega con otra en uso queda **en espera** y empieza a contar cuando se agota la anterior (así los servicios no se cuentan dos veces).
+- Todo queda en Auditoría. Las tablas son `supplies`, `supply_services` y `supply_lots` (migración 19).
+
 ## Menú, buscador y número de especialista
 
-- **Menú:** Caja, Manicuristas, Clientes, Nómina y Servicios van de primeras (en ese orden) y después el resto como siempre; cada rol ve solo las que le tocan.
+- **Menú:** Caja, Manicuristas, Clientes, Nómina y Servicios van de primeras (en ese orden), luego Inventario y después el resto como siempre; cada rol ve solo las que le tocan.
 - **Buscador de arriba** (atajo «/»): además de clientes, citas y ventas, lleva a las secciones del panel. Al hacer clic sin escribir muestra las primeras; al escribir («caj», «nomina») filtra sin importar tildes ni mayúsculas.
 - **Número de especialista:** en *Especialistas → ficha → Número* (de 0 a 99, no se repite). Con número, la especialista se ve como «01 · Santa Antigua» en la lista de Especialistas, los selectores de citas, la agenda, Manicuristas, Caja y Nómina; sin número, solo el nombre. La página pública siempre muestra solo el nombre (la columna no se le concede al público). La lista se ordena por su orden manual, luego por número y luego por nombre.
 
@@ -245,7 +258,7 @@ Los genera `pg_cron` dentro de Supabase cada 5 minutos (la migración 08 lo prog
 | `npm run e2e:gcal` | sincronización con Google Calendar contra un servidor simulado |
 | `npm run e2e:a11y` | escaneo de accesibilidad (axe) de la web y del panel |
 
-> Las suites nuevas `simultaneas`, `nomina`, `equipos`, `caja` y `manicuristas` (`node e2e/run-all.mjs simultaneas nomina equipos caja manicuristas`) son **seguras con la base real**: solo crean y borran filas propias («E2E …», ventas de enero de 2020) y limpian hasta su rastro en Auditoría. Las demás sí modifican datos:
+> Las suites nuevas `simultaneas`, `nomina`, `equipos`, `caja` y `manicuristas`, `especialistas`, `propina` e `inventario` (`node e2e/run-all.mjs simultaneas nomina equipos caja manicuristas especialistas propina inventario`) son **seguras con la base real**: solo crean y borran filas propias («E2E …», ventas de enero de 2020) y limpian hasta su rastro en Auditoría. Las demás sí modifican datos:
 >
 > ⚠ Las pruebas **E2E escriben y borran datos** en la base de `.env.local` y cambian (y restauran) algunos ajustes. Úsalas con un proyecto de Supabase de pruebas, no durante la operación real. Las suites antiguas (`public`, `admin-a/b/c`, `roles`…) usan las especialistas demo de la semilla, así que solo corren en un proyecto con datos demo; `simultaneas`, `nomina`, `equipos`, `exports` y `a11y` no las necesitan. La primera vez, `npx playwright install chromium`. Con la web corriendo (`npm run build && npm start`) ejecuta `npm run e2e`; crea y borra solas los usuarios `tmp-*@glow.test`.
 

@@ -18,6 +18,11 @@ test("un rol que no ve alguna de las prioritarias no se queda con huecos", () =>
   assert.deepEqual(prioritize([] as { href: string; label: string }[]).map((i) => i.label), []);
 });
 
+test("Inventario va justo después de Servicios", () => {
+  const withInv = [...nav, { href: "/admin/inventory", label: "Inventario" }];
+  assert.deepEqual(prioritize(withInv).slice(0, 6).map((i) => i.label), ["Caja", "Manicuristas", "Clientes", "Nómina", "Servicios", "Inventario"]);
+});
+
 test("no pierde ni repite secciones", () => {
   const out = prioritize(nav);
   assert.equal(out.length, nav.length);
