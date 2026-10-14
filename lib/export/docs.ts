@@ -8,7 +8,7 @@ import type { ApptRow } from "../data/appointments.ts";
 import type { PayrollLine, PayrollRun } from "../data/payroll.ts";
 import { apptSubtotal, apptTotal } from "../data/appointment-math.ts";
 import { buildTimeline, changeOf, MOVE_LABEL, splitProduction, type CashReport, type TimelineRow } from "../domain/cash.ts";
-import { monthLabel, type ManiSummary } from "../domain/manicurists.ts";
+import { periodLabel as maniPeriodLabel, type ManiSummary, type Period } from "../domain/manicurists.ts";
 import { periodLabel } from "../domain/payroll.ts";
 import { summarize, type ApptIn, type Row, type SaleIn, type SummaryOpts } from "../domain/reports.ts";
 import { SOURCE_LABEL, STATUS_META } from "../domain/status.ts";
@@ -481,7 +481,7 @@ export function cashDoc(r: CashReport, ctx: Ctx): ExportDoc {
 }
 
 /* ═════════════════════════════ MANICURISTAS (mes) ═════════════════════════════ */
-export function manicuristsDoc(month: string, list: ManiSummary[], onlyPaid: boolean, ctx: Ctx): ExportDoc {
+export function manicuristsDoc(period: Period, list: ManiSummary[], onlyPaid: boolean, ctx: Ctx): ExportDoc {
   const sum = (pick: (m: ManiSummary) => number) => round2(list.reduce((t, m) => t + pick(m), 0));
   const people: R[] = list.map((m) => ({
     emp: m.name, serv: m.services, cobrado: m.charged, pct: m.pct == null ? null : m.pct / 100, com: m.commission, sueldo: m.salary, total: m.payable,
@@ -492,20 +492,20 @@ export function manicuristsDoc(month: string, list: ManiSummary[], onlyPaid: boo
     estado: l.status === "pagado" ? "Cobrado" : l.status === "parcial" ? "Cobro parcial" : "Sin cobrar", pct: l.pct / 100, com: l.counts ? l.commission : null, cuenta: l.counts ? "Sí" : "No",
   })));
   return {
-    fileBase: `glow-manicuristas-${month}`, title: `Manicuristas · ${monthLabel(month)}`, subtitle: "Sueldo fijo mensual + porcentaje de los servicios que realizan",
+    fileBase: `glow-manicuristas-${period.month}-${period.kind}`, title: `Manicuristas · ${maniPeriodLabel(period)}`, subtitle: "Sueldo fijo de la quincena + porcentaje de los servicios que realizan",
     business: ctx.business, generatedAt: ctx.generatedAt,
-    filters: [["Mes", monthLabel(month)], ["Servicios", onlyPaid ? "Solo de ventas cobradas por completo" : "Incluye ventas pendientes de cobro"]],
+    filters: [["Período", maniPeriodLabel(period)], ["Servicios", onlyPaid ? "Solo de ventas cobradas por completo" : "Incluye ventas pendientes de cobro"]],
     kpis: [
-      { label: "Total a pagar", value: sum((m) => m.payable), kind: "money" }, { label: "Sueldos", value: sum((m) => m.salary), kind: "money" },
+      { label: "Total a pagar", value: sum((m) => m.payable), kind: "money" }, { label: period.kind === "mes" ? "Sueldos del mes" : "Sueldos de la quincena", value: sum((m) => m.salary), kind: "money" },
       { label: "Comisiones", value: sum((m) => m.commission), kind: "money" }, { label: "Cobrado por servicios", value: sum((m) => m.charged), kind: "money" },
       { label: "Servicios", value: list.reduce((t, m) => t + m.services, 0), kind: "int" }, { label: "Manicuristas", value: list.length, kind: "int" },
     ],
     sections: [
       {
-        name: "Por manicurista", title: "Lo que se le paga a cada manicurista", subtitle: "Total = sueldo mensual + comisión de los servicios que cuentan",
+        name: "Por manicurista", title: "Lo que se le paga a cada manicurista", subtitle: "Total = sueldo del período + comisión de los servicios que cuentan",
         columns: [
           col("emp", "Manicurista", { width: 26 }), col("serv", "Servicios", { kind: "int", total: "sum" }), col("cobrado", "Cobrado", { kind: "money", total: "sum" }), col("pct", "Comisión %", { kind: "percent" }),
-          col("com", "Comisión", { kind: "money", total: "sum" }), col("sueldo", "Sueldo mensual", { kind: "money", total: "sum" }), col("total", "Total a pagar", { kind: "money", total: "sum" }),
+          col("com", "Comisión", { kind: "money", total: "sum" }), col("sueldo", period.kind === "mes" ? "Sueldo del mes" : "Sueldo de la quincena", { kind: "money", total: "sum" }), col("total", "Total a pagar", { kind: "money", total: "sum" }),
           col("pend", "Sin cobrar aún", { kind: "money", total: "sum" }), col("nota", "Nota", { width: 40, pdf: false }),
         ],
         rows: people, totals: { label: "Total" }, emptyText: "No hay manicuristas. Escribe «Manicurista» en la especialidad de la ficha.",
@@ -516,7 +516,7 @@ export function manicuristsDoc(month: string, list: ManiSummary[], onlyPaid: boo
           col("emp", "Manicurista", { width: 22 }), col("fecha", "Fecha", { kind: "datetime" }), col("cliente", "Cliente", { width: 24 }), col("serv", "Servicio", { width: 28 }), col("venta", "Venta"),
           col("monto", "Cobrado", { kind: "money", total: "sum" }), col("estado", "Estado de la venta"), col("pct", "%", { kind: "percent" }), col("com", "Comisión", { kind: "money", total: "sum" }), col("cuenta", "Cuenta", { pdf: false }),
         ],
-        rows: lines, totals: { label: "Total (solo los que cuentan)", excludeKey: "cuenta", excludeValues: ["No"] }, emptyText: "No hubo servicios en este mes.",
+        rows: lines, totals: { label: "Total (solo los que cuentan)", excludeKey: "cuenta", excludeValues: ["No"] }, emptyText: "No hubo servicios en este período.",
         note: "El PDF muestra las primeras filas; el Excel y el CSV incluyen todo.",
       },
     ],

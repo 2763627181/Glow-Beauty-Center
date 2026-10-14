@@ -41,7 +41,7 @@ export function EmployeeForm({ id, initial, services }: { id: string | null; ini
         <div className={u.field}><label htmlFor="e-salon">Paga al salón %</label><NumInput id="e-salon" min={0} max={100} value={salonPctFromCommission(f.commission_pct)} onValue={(v) => set({ commission_pct: commissionFromSalonPct(v) })} aria-describedby="e-salon-hint" />
           <span id="e-salon-hint" className={u.hint}>Es lo mismo que la comisión, visto al revés: si de lo que produce paga el 15% al salón, escribe 15 y su comisión queda en 85. Se usa en la Caja y en la Nómina.</span></div>
         <div className={u.field}><label htmlFor="e-base">Sueldo base por pago, RD$ (opcional)</label><NumInput id="e-base" min={0} value={f.base_salary ?? null} emptyValue={0} onValue={(v) => set({ base_salary: v ?? 0 })} />
-          <span className={u.hint}>Si cobra un monto fijo además de la comisión. Se copia a cada nómina y ahí se puede ajustar.</span></div>
+          <span className={u.hint}>Si cobra un monto fijo además de la comisión: lo que se le paga en cada pago (si cobra por quincena, el de una quincena, por ejemplo 7,000). Se copia a cada nómina y ahí se puede ajustar.</span></div>
         <div className={u.field}><label htmlFor="e-bd">Cumpleaños (día y mes)</label>
           <div style={{ display: "grid", gridTemplateColumns: "90px minmax(0, 1fr)", gap: 8 }}>
             <select id="e-bd" aria-label="Día de cumpleaños" value={f.birth_day ?? ""} onChange={(e) => set({ birth_day: e.target.value ? Number(e.target.value) : null })}>

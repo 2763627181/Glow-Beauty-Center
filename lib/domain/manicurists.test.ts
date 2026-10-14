@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildManicurists, isManicurist, monthLabel, monthRange, parseMonth, shiftMonth, type ManiEmployee } from "./manicurists.ts";
+import {
+  buildManicurists, currentPeriod, isFuture, isManicurist, monthLabel, monthRange, parseMonth, parsePeriod, periodLabel, periodRange, salaryFactor, shiftMonth, shiftPeriod, type ManiEmployee,
+} from "./manicurists.ts";
 import type { SaleIn } from "./reports.ts";
 
-const emp = (id: string, o: Partial<ManiEmployee> = {}): ManiEmployee => ({ id, full_name: id, active: true, specialty: "manicurista", base_salary: 14000, commission_pct: 15, ...o });
+const emp = (id: string, o: Partial<ManiEmployee> = {}): ManiEmployee => ({ id, full_name: id, active: true, specialty: "manicurista", base_salary: 7000, commission_pct: 15, ...o });
 const item = (employee_id: string | null, total: number, description = "Manicure", extra: Record<string, unknown> = {}) =>
   ({ description, total, service_id: null, category_name: "", employee_id, employee_name: "", commission_pct: null, ...extra });
 let n = 0;
@@ -26,14 +28,15 @@ test("una venta sin cliente se muestra como «Mostrador»", () => {
   assert.equal(m.lines[0].client, "Mostrador");
 });
 
-test("sueldo fijo 14,000 + 15 % de lo que cobró por sus servicios", () => {
+test("quincena: sueldo fijo de 7,000 + 15 % de lo que cobró por sus servicios", () => {
   const r = buildManicurists([sale([item("m", 450, "Pintura de pies"), item("m", 1500, "Soft Gel")]), sale([item("m", 700, "Pedicure")])], [emp("m")], { onlyPaid: true });
   assert.equal(r.length, 1);
   assert.equal(r[0].services, 3);
   assert.equal(r[0].charged, 2650);
   assert.equal(r[0].commission, 397.5); // 15 % de 2,650
-  assert.equal(r[0].salary, 14000);
-  assert.equal(r[0].payable, 14397.5);
+  assert.equal(r[0].salary, 7000);
+  assert.equal(r[0].salaryPerPay, 7000);
+  assert.equal(r[0].payable, 7397.5);
   assert.equal(r[0].lines.length, 3);
   assert.equal(r[0].lines[0].commission, 67.5);
 });
@@ -88,7 +91,7 @@ test("sin porcentaje configurado se avisa y la comisión queda en 0", () => {
   const [m] = buildManicurists([sale([item("m", 1000)])], [emp("m", { commission_pct: null })], { onlyPaid: true });
   assert.equal(m.missingPct, true);
   assert.equal(m.commission, 0);
-  assert.equal(m.payable, 14000);
+  assert.equal(m.payable, 7000);
   assert.equal(m.pct, null);
 });
 
@@ -102,7 +105,7 @@ test("servicio compartido por varias: se marca y cuenta solo su parte", () => {
 test("sin servicios en el mes: aparece con su sueldo; una inactiva sin servicios no aparece", () => {
   const r = buildManicurists([], [emp("m"), emp("x", { active: false })], { onlyPaid: true });
   assert.deepEqual(r.map((x) => x.employeeId), ["m"]);
-  assert.equal(r[0].payable, 14000);
+  assert.equal(r[0].payable, 7000);
   assert.equal(r[0].services, 0);
 });
 
@@ -115,6 +118,59 @@ test("centavos: cada línea se redondea y el total es la suma de lo que se ve en
   const [m] = buildManicurists([sale([item("m", 333.33)]), sale([item("m", 0.1)]), sale([item("m", 0.2)])], [emp("m")], { onlyPaid: true });
   assert.equal(m.commission, 50.05); // 50.00 + 0.02 + 0.03
   assert.equal(m.commission, Math.round(m.lines.reduce((s, l) => s + l.commission, 0) * 100) / 100);
+});
+
+test("mes completo: el sueldo son dos pagos de quincena (14,000) + la comisión de todo el mes", () => {
+  const [m] = buildManicurists([sale([item("m", 1000)])], [emp("m")], { onlyPaid: true, salaryFactor: salaryFactor("mes") });
+  assert.equal(m.salary, 14000);
+  assert.equal(m.salaryPerPay, 7000);
+  assert.equal(m.payable, 14150);
+  const [q] = buildManicurists([sale([item("m", 1000)])], [emp("m")], { onlyPaid: true, salaryFactor: salaryFactor("q1") });
+  assert.equal(q.payable, 7150);
+});
+
+test("quincenas: fechas de cada período", () => {
+  assert.deepEqual(periodRange({ month: "2026-10", kind: "q1" }), { from: "2026-10-01", to: "2026-10-16" });
+  assert.deepEqual(periodRange({ month: "2026-10", kind: "q2" }), { from: "2026-10-16", to: "2026-11-01" });
+  assert.deepEqual(periodRange({ month: "2026-12", kind: "q2" }), { from: "2026-12-16", to: "2027-01-01" });
+  assert.deepEqual(periodRange({ month: "2026-02", kind: "mes" }), { from: "2026-02-01", to: "2026-03-01" });
+  assert.equal(salaryFactor("q1"), 1);
+  assert.equal(salaryFactor("q2"), 1);
+  assert.equal(salaryFactor("mes"), 2);
+});
+
+test("quincenas: etiquetas con el último día del mes correcto", () => {
+  assert.equal(periodLabel({ month: "2026-10", kind: "q1" }), "1.ª quincena de octubre de 2026 (del 1 al 15)");
+  assert.equal(periodLabel({ month: "2026-10", kind: "q2" }), "2.ª quincena de octubre de 2026 (del 16 al 31)");
+  assert.equal(periodLabel({ month: "2026-02", kind: "q2" }), "2.ª quincena de febrero de 2026 (del 16 al 28)");
+  assert.equal(periodLabel({ month: "2028-02", kind: "q2" }), "2.ª quincena de febrero de 2028 (del 16 al 29)");
+  assert.equal(periodLabel({ month: "2026-10", kind: "mes" }), "octubre de 2026 (mes completo)");
+});
+
+test("quincenas: la de hoy, anterior y siguiente (también al cruzar de año)", () => {
+  assert.deepEqual(currentPeriod("2026-10-14"), { month: "2026-10", kind: "q1" });
+  assert.deepEqual(currentPeriod("2026-10-15"), { month: "2026-10", kind: "q1" });
+  assert.deepEqual(currentPeriod("2026-10-16"), { month: "2026-10", kind: "q2" });
+  assert.deepEqual(shiftPeriod({ month: "2026-10", kind: "q1" }, -1), { month: "2026-09", kind: "q2" });
+  assert.deepEqual(shiftPeriod({ month: "2026-10", kind: "q2" }, -1), { month: "2026-10", kind: "q1" });
+  assert.deepEqual(shiftPeriod({ month: "2026-10", kind: "q2" }, 1), { month: "2026-11", kind: "q1" });
+  assert.deepEqual(shiftPeriod({ month: "2026-01", kind: "q1" }, -1), { month: "2025-12", kind: "q2" });
+  assert.deepEqual(shiftPeriod({ month: "2026-12", kind: "q2" }, 1), { month: "2027-01", kind: "q1" });
+  assert.deepEqual(shiftPeriod({ month: "2026-12", kind: "mes" }, 1), { month: "2027-01", kind: "mes" });
+});
+
+test("quincenas: lo que viene en la dirección se valida y no se mira el futuro", () => {
+  assert.deepEqual(parsePeriod(undefined, undefined, "2026-10-14"), { month: "2026-10", kind: "q1" });
+  assert.deepEqual(parsePeriod(undefined, undefined, "2026-10-20"), { month: "2026-10", kind: "q2" });
+  assert.deepEqual(parsePeriod("2026-09", undefined, "2026-10-20"), { month: "2026-09", kind: "q1" });
+  assert.deepEqual(parsePeriod("2026-09", "q2", "2026-10-20"), { month: "2026-09", kind: "q2" });
+  assert.deepEqual(parsePeriod("2026-09", "mes", "2026-10-20"), { month: "2026-09", kind: "mes" });
+  assert.deepEqual(parsePeriod("basura", "q9", "2026-10-20"), { month: "2026-10", kind: "q2" });
+  assert.equal(isFuture({ month: "2026-10", kind: "q2" }, "2026-10-14"), true);
+  assert.equal(isFuture({ month: "2026-10", kind: "q1" }, "2026-10-14"), false);
+  assert.equal(isFuture({ month: "2026-11", kind: "q1" }, "2026-10-14"), true);
+  assert.equal(isFuture({ month: "2026-10", kind: "mes" }, "2026-10-14"), false);
+  assert.equal(isFuture({ month: "2026-11", kind: "mes" }, "2026-10-14"), true);
 });
 
 test("meses: etiqueta, anterior/siguiente, rango y validación", () => {

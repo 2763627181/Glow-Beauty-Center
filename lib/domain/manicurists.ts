@@ -1,5 +1,5 @@
 /**
- * Manicuristas: sueldo fijo mensual + un porcentaje de lo que cobran los servicios que realizan (puro, sin I/O).
+ * Manicuristas: sueldo fijo por quincena (el doble al mes) + un porcentaje de lo que cobran los servicios que realizan (puro, sin I/O).
  * Mismas reglas que la nómina: el % de la línea y, si no tiene, el de la especialista; las ventas reembolsadas o anuladas nunca cuentan;
  * por defecto solo cuentan las ventas cobradas por completo (se puede incluir también lo pendiente de cobro).
  */
@@ -40,8 +40,10 @@ export type ManiSummary = {
   employeeId: string;
   name: string;
   active: boolean;
-  /** Sueldo fijo mensual. */
+  /** Sueldo fijo del período (una quincena, o dos quincenas si se mira el mes completo). */
   salary: number;
+  /** Sueldo fijo de cada pago (el de una quincena), tal como está en su ficha. */
+  salaryPerPay: number;
   /** % de comisión de su ficha (null = sin configurar). */
   pct: number | null;
   /** Servicios que cuentan. */
@@ -62,6 +64,8 @@ export type ManiSummary = {
 export type ManiOpts = {
   /** Solo ventas cobradas por completo. Falso: también las pendientes y con pago parcial. */
   onlyPaid: boolean;
+  /** Cuántos pagos de sueldo caben en el período: 1 para una quincena, 2 para el mes completo. Por defecto 1. */
+  salaryFactor?: number;
 };
 
 /**
@@ -69,6 +73,7 @@ export type ManiOpts = {
  * Devuelve una entrada por manicurista activa y por cualquier manicurista inactiva que haya tenido servicios.
  */
 export function buildManicurists(sales: SaleIn[], employees: ManiEmployee[], opts: ManiOpts): ManiSummary[] {
+  const factor = opts.salaryFactor ?? 1;
   const maniById = new Map(employees.filter((e) => isManicurist(e.specialty)).map((e) => [e.id, e]));
   const lines = new Map<string, ManiLine[]>();
   const missing = new Set<string>();
@@ -99,16 +104,16 @@ export function buildManicurists(sales: SaleIn[], employees: ManiEmployee[], opt
       const counted = ls.filter((l) => l.counts), pending = ls.filter((l) => !l.counts);
       const commission = round2(counted.reduce((t, l) => t + l.commission, 0));
       return {
-        employeeId: e.id, name: e.full_name, active: e.active, salary: round2(e.base_salary), pct: e.commission_pct,
+        employeeId: e.id, name: e.full_name, active: e.active, salary: round2(e.base_salary * factor), salaryPerPay: round2(e.base_salary), pct: e.commission_pct,
         services: counted.length, charged: round2(counted.reduce((t, l) => t + l.total, 0)),
         pendingServices: pending.length, pendingAmount: round2(pending.reduce((t, l) => t + l.total, 0)),
-        commission, payable: round2(e.base_salary + commission), missingPct: missing.has(e.id), lines: ls,
+        commission, payable: round2(e.base_salary * factor + commission), missingPct: missing.has(e.id), lines: ls,
       };
     })
     .sort((a, b) => a.name.localeCompare(b.name, "es"));
 }
 
-/* ───────── Mes ───────── */
+/* ───────── Quincenas y mes ───────── */
 const MONTHS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 export const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 
@@ -124,3 +129,52 @@ export function shiftMonth(m: string, by: number): string {
 export const monthRange = (m: string) => ({ from: `${m}-01`, to: `${shiftMonth(m, 1)}-01` });
 /** Mes pedido en la dirección, o `fallback` si no es válido. */
 export const parseMonth = (v: unknown, fallback: string) => (typeof v === "string" && MONTH_RE.test(v) ? v : fallback);
+
+/** 1.ª quincena (del 1 al 15), 2.ª quincena (del 16 al último día) o el mes completo. */
+export type PeriodKind = "q1" | "q2" | "mes";
+export type Period = { month: string; kind: PeriodKind };
+export const PERIOD_KINDS: PeriodKind[] = ["q1", "q2", "mes"];
+
+const lastDayOf = (m: string) => new Date(Date.UTC(Number(m.slice(0, 4)), Number(m.slice(5, 7)), 0)).getUTCDate();
+/** Quincena en la que cae el día de hoy. */
+export const currentPeriod = (today: string): Period => ({ month: today.slice(0, 7), kind: Number(today.slice(8, 10)) <= 15 ? "q1" : "q2" });
+/** Período pedido en la dirección (`month` y `period`); lo que no sea válido cae en la quincena de hoy. */
+export function parsePeriod(month: unknown, kind: unknown, today: string): Period {
+  const now = currentPeriod(today);
+  const m = parseMonth(month, now.month);
+  const k = PERIOD_KINDS.find((x) => x === kind);
+  // sin quincena en la dirección: la de hoy si es el mes actual; si no, la primera quincena de ese mes
+  return { month: m, kind: k ?? (m === now.month ? now.kind : "q1") };
+}
+/** Fechas del período: desde (incluida) hasta (no incluida), AAAA-MM-DD. */
+export function periodRange(p: Period): { from: string; to: string } {
+  const next = `${shiftMonth(p.month, 1)}-01`;
+  if (p.kind === "q1") return { from: `${p.month}-01`, to: `${p.month}-16` };
+  if (p.kind === "q2") return { from: `${p.month}-16`, to: next };
+  return { from: `${p.month}-01`, to: next };
+}
+/** Cuántos pagos de sueldo hay en el período (1 por quincena, 2 en el mes completo). */
+export const salaryFactor = (k: PeriodKind) => (k === "mes" ? 2 : 1);
+/** «1.ª quincena de octubre de 2026 (del 1 al 15)». */
+export function periodLabel(p: Period): string {
+  if (p.kind === "q1") return `1.ª quincena de ${monthLabel(p.month)} (del 1 al 15)`;
+  if (p.kind === "q2") return `2.ª quincena de ${monthLabel(p.month)} (del 16 al ${lastDayOf(p.month)})`;
+  return `${monthLabel(p.month)} (mes completo)`;
+}
+/** Texto corto para botones y archivos. */
+export const periodShort = (p: Period) => (p.kind === "q1" ? "1.ª quincena" : p.kind === "q2" ? "2.ª quincena" : "Mes completo");
+/** Período anterior (−1) o siguiente (+1): de quincena en quincena, o de mes en mes si se mira el mes completo. */
+export function shiftPeriod(p: Period, by: number): Period {
+  if (p.kind === "mes") return { month: shiftMonth(p.month, by), kind: "mes" };
+  const idx = (Number(p.month.slice(0, 4)) * 12 + Number(p.month.slice(5, 7)) - 1) * 2 + (p.kind === "q2" ? 1 : 0) + by;
+  const half = ((idx % 2) + 2) % 2;
+  const months = (idx - half) / 2;
+  const y = Math.floor(months / 12), mo = months - y * 12 + 1;
+  return { month: `${y}-${String(mo).padStart(2, "0")}`, kind: half === 1 ? "q2" : "q1" };
+}
+/** ¿El período empieza después de hoy? (no se ofrece mirar el futuro) */
+export function isFuture(p: Period, today: string): boolean {
+  if (p.kind === "mes") return p.month > today.slice(0, 7);
+  const idx = (x: Period) => (Number(x.month.slice(0, 4)) * 12 + Number(x.month.slice(5, 7)) - 1) * 2 + (x.kind === "q2" ? 1 : 0);
+  return idx(p) > idx(currentPeriod(today));
+}
