@@ -15,6 +15,7 @@ export const PERMISSIONS = {
   services: ["super_admin", "manager"],
   staff: ["super_admin", "manager"],
   payroll: ["super_admin", "manager"],
+  manicurists: ["super_admin", "manager"],
   sales: ["super_admin", "manager", "receptionist"],
   payments: ["super_admin", "manager", "receptionist"],
   cash: ["super_admin", "manager", "receptionist"],

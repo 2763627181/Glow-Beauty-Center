@@ -8,6 +8,7 @@ import type { ApptRow } from "../data/appointments.ts";
 import type { PayrollLine, PayrollRun } from "../data/payroll.ts";
 import { apptSubtotal, apptTotal } from "../data/appointment-math.ts";
 import { buildTimeline, changeOf, MOVE_LABEL, splitProduction, type CashReport, type TimelineRow } from "../domain/cash.ts";
+import { monthLabel, type ManiSummary } from "../domain/manicurists.ts";
 import { periodLabel } from "../domain/payroll.ts";
 import { summarize, type ApptIn, type Row, type SaleIn, type SummaryOpts } from "../domain/reports.ts";
 import { SOURCE_LABEL, STATUS_META } from "../domain/status.ts";
@@ -474,6 +475,50 @@ export function cashDoc(r: CashReport, ctx: Ctx): ExportDoc {
       { name: "Cobros", title: "Cobros y reembolsos", columns: [col("hora", "Hora", { kind: "datetime" }), col("tipo", "Tipo"), col("venta", "Venta"), col("cliente", "Cliente", { width: 24 }), col("metodo", "Método"), col("lugar", "Cómo se cobró"), col("monto", "Monto", { kind: "money" }), col("recibido", "Recibido", { kind: "money" }), col("vuelto", "Vuelto", { kind: "money" }), col("ref", "Referencia", { pdf: false }), col("por", "Cobró", { pdf: false })], rows: flow, emptyText: "No hubo cobros en este turno." },
       { name: "Entradas y salidas", title: "Entradas y salidas de efectivo", columns: [col("hora", "Hora", { kind: "datetime" }), col("tipo", "Tipo"), col("cat", "Categoría", { width: 26 }), col("emp", "Especialista", { width: 22 }), col("det", "Detalle", { width: 30 }), col("monto", "Monto", { kind: "money" }), col("estado", "Estado"), col("motivo", "Motivo de anulación", { pdf: false }), col("por", "Registró", { pdf: false })], rows: moves, emptyText: "No hubo entradas ni salidas de efectivo." },
       { name: "Producción", title: "Producción por especialista", subtitle: "Paga al salón = producción − lo que se queda ella según su porcentaje", columns: [col("emp", "Especialista", { width: 26 }), col("serv", "Servicios", { kind: "int", total: "sum" }), col("prod", "Producción", { kind: "money", total: "sum" }), col("salon", "Paga al salón", { kind: "money", total: "sum" }), col("ella", "Se queda ella", { kind: "money", total: "sum" }), col("ent", "Entregado de caja", { kind: "money", total: "sum" }), col("falta", "Por entregar", { kind: "money" }), col("nota", "Nota", { width: 34, pdf: false })], rows: prod, totals: { label: "Total" }, emptyText: "No hubo ventas en este turno." },
+    ],
+    csv: "all", pdfMaxRows: 80,
+  };
+}
+
+/* ═════════════════════════════ MANICURISTAS (mes) ═════════════════════════════ */
+export function manicuristsDoc(month: string, list: ManiSummary[], onlyPaid: boolean, ctx: Ctx): ExportDoc {
+  const sum = (pick: (m: ManiSummary) => number) => round2(list.reduce((t, m) => t + pick(m), 0));
+  const people: R[] = list.map((m) => ({
+    emp: m.name, serv: m.services, cobrado: m.charged, pct: m.pct == null ? null : m.pct / 100, com: m.commission, sueldo: m.salary, total: m.payable,
+    pend: m.pendingAmount, nota: m.missingPct ? "Falta el porcentaje en su ficha: la comisión salió en 0" : "",
+  }));
+  const lines: R[] = list.flatMap((m) => m.lines.map((l) => ({
+    emp: m.name, fecha: l.date, cliente: l.client, serv: l.description + (l.shared ? " (compartido)" : ""), venta: l.saleNumber, monto: l.total,
+    estado: l.status === "pagado" ? "Cobrado" : l.status === "parcial" ? "Cobro parcial" : "Sin cobrar", pct: l.pct / 100, com: l.counts ? l.commission : null, cuenta: l.counts ? "Sí" : "No",
+  })));
+  return {
+    fileBase: `glow-manicuristas-${month}`, title: `Manicuristas · ${monthLabel(month)}`, subtitle: "Sueldo fijo mensual + porcentaje de los servicios que realizan",
+    business: ctx.business, generatedAt: ctx.generatedAt,
+    filters: [["Mes", monthLabel(month)], ["Servicios", onlyPaid ? "Solo de ventas cobradas por completo" : "Incluye ventas pendientes de cobro"]],
+    kpis: [
+      { label: "Total a pagar", value: sum((m) => m.payable), kind: "money" }, { label: "Sueldos", value: sum((m) => m.salary), kind: "money" },
+      { label: "Comisiones", value: sum((m) => m.commission), kind: "money" }, { label: "Cobrado por servicios", value: sum((m) => m.charged), kind: "money" },
+      { label: "Servicios", value: list.reduce((t, m) => t + m.services, 0), kind: "int" }, { label: "Manicuristas", value: list.length, kind: "int" },
+    ],
+    sections: [
+      {
+        name: "Por manicurista", title: "Lo que se le paga a cada manicurista", subtitle: "Total = sueldo mensual + comisión de los servicios que cuentan",
+        columns: [
+          col("emp", "Manicurista", { width: 26 }), col("serv", "Servicios", { kind: "int", total: "sum" }), col("cobrado", "Cobrado", { kind: "money", total: "sum" }), col("pct", "Comisión %", { kind: "percent" }),
+          col("com", "Comisión", { kind: "money", total: "sum" }), col("sueldo", "Sueldo mensual", { kind: "money", total: "sum" }), col("total", "Total a pagar", { kind: "money", total: "sum" }),
+          col("pend", "Sin cobrar aún", { kind: "money", total: "sum" }), col("nota", "Nota", { width: 40, pdf: false }),
+        ],
+        rows: people, totals: { label: "Total" }, emptyText: "No hay manicuristas. Escribe «Manicurista» en la especialidad de la ficha.",
+      },
+      {
+        name: "Servicios", title: "Servicios realizados", subtitle: "Qué servicio, a quién y cuánto se cobró, con su comisión. Los totales solo suman los que cuentan.",
+        columns: [
+          col("emp", "Manicurista", { width: 22 }), col("fecha", "Fecha", { kind: "datetime" }), col("cliente", "Cliente", { width: 24 }), col("serv", "Servicio", { width: 28 }), col("venta", "Venta"),
+          col("monto", "Cobrado", { kind: "money", total: "sum" }), col("estado", "Estado de la venta"), col("pct", "%", { kind: "percent" }), col("com", "Comisión", { kind: "money", total: "sum" }), col("cuenta", "Cuenta", { pdf: false }),
+        ],
+        rows: lines, totals: { label: "Total (solo los que cuentan)", excludeKey: "cuenta", excludeValues: ["No"] }, emptyText: "No hubo servicios en este mes.",
+        note: "El PDF muestra las primeras filas; el Excel y el CSV incluyen todo.",
+      },
     ],
     csv: "all", pdfMaxRows: 80,
   };

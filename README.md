@@ -82,7 +82,7 @@ Los permisos se **imponen en la base de datos** (RLS y funciones SQL), no solo e
 | Cobrar, ventas rápidas, ver ventas y cobros | ✔ | ✔ | ✔ | – |
 | **Caja** (abrir y cerrar, entradas y salidas de efectivo, producción por especialista) | ✔ | ✔ | ✔ | – |
 | Anular un movimiento de caja y reabrir un cierre | ✔ | ✔ | – | – |
-| **Nómina de pago** (crear, ajustar, pagar, volantes) | ✔ | ✔ | – | – |
+| **Nómina de pago** (crear, ajustar, pagar, volantes) y **Manicuristas** | ✔ | ✔ | – | – |
 | Anular ventas, reembolsar, eliminar registros, fusionar clientes | ✔ | ✔ | – | – |
 
 ## Qué se edita desde el panel
@@ -91,6 +91,7 @@ Los permisos se **imponen en la base de datos** (RLS y funciones SQL), no solo e
 |---|---|
 | **Servicios** | servicios (precio, duración, tiempos antes/después, comisión, foto, “desde”, destacado, consulta previa, especialistas que lo hacen), **variantes** (largo del cabello…), **complementos**, categorías (con foto), productos de venta; duplicar, ordenar, activar/ocultar. Los que ya tienen historial se archivan para no perder reportes |
 | **Especialistas** | datos, foto, biografía, comisión, sueldo base, **cumpleaños** (día y mes; ese día llega una notificación), servicios (con «Marcar todos» por categoría), horario semanal con almuerzo, ausencias/vacaciones, orden, cuenta de acceso. Una especialista nueva nace con el horario del negocio y el panel avisa si le falta horario o servicios |
+| **Manicuristas** | sueldo fijo mensual + porcentaje de los servicios que realizan, con el detalle de cada servicio, cliente y monto, y el total a pagar del mes; exportable. Ver más abajo |
 | **Caja** | turnos de caja (fondo inicial, cobros en efectivo con **vuelto**, tarjeta y transferencia que se cobran aparte, entradas y salidas de efectivo, pago a especialistas, cierre con diferencia), la producción de cada especialista con lo que **paga al salón**, y el reporte de cada cierre en Excel, PDF y CSV. Ver más abajo |
 | **Nómina** | pago por período (quincena, mes, semana o fechas propias): ventas, **comisión**, propinas, sueldo base, bonos y descuentos de cada especialista; borrador editable → pagada (queda congelada); volante de pago y nómina completa en Excel, PDF y CSV. Ver más abajo |
 | **Solicitudes, Tablero y Agenda** | todo el flujo de la cita (9 estados), arrastrar y soltar, reprogramar, varios servicios con especialistas distintos, notas, WhatsApp, citas manuales y clientes sin cita. **Sin límites desde el panel:** varias citas a la misma hora con la misma especialista, cualquier especialista para cualquier servicio y citas a horas que ya pasaron (el panel solo avisa; la agenda muestra las simultáneas una al lado de la otra). **Varias especialistas por servicio:** en *Nueva cita* y *Cliente sin cita* marcas una o varias por servicio (por ejemplo, manicure con Esther y Santa, y pedicure con otra) y puedes marcar «al mismo tiempo que el servicio anterior»; al editar, «+ Otra especialista» suma una al servicio |
@@ -121,6 +122,15 @@ Cada exportación sale del mismo documento, así que los tres formatos siempre c
 - **PDF:** portada con indicadores, tablas con encabezado de color, estados en color, barras de porcentaje, totales y «Página X de Y». Muestra hasta 2,500 filas por tabla; el Excel y el CSV traen todo.
 - **CSV:** una tabla limpia para importar en otros programas (el reporte completo trae todas las secciones). Va con BOM para que Excel respete las tildes y protegido contra fórmulas maliciosas.
 - Los reportes y listados leen **todas** las filas del período (antes Supabase los cortaba en 1,000).
+
+## Manicuristas
+
+*Manicuristas* (menú; super admin y gerente) es el apartado de las manicuristas: **sueldo fijo mensual + un porcentaje de lo que cobran los servicios que realizan**. Aparecen solas las especialistas cuya *Especialidad* dice «Manicurista» (hoy Mayra y María, con sueldo de RD$ 14,000 al mes y el 15 %; se cambian en su ficha: *Sueldo base* y *Comisión %*).
+
+- Cada manicurista tiene su tarjeta del mes con: **qué servicio hizo, a quién y cuánto se cobró**, y **su 15 % calculado solo** en cada servicio, más el total del mes: servicios, cobrado, comisión, sueldo y **total a pagar** (sueldo + comisión).
+- Mes anterior/siguiente con las flechas. Por defecto cuentan los servicios de **ventas ya cobradas por completo**; los de ventas pendientes o con cobro parcial se muestran aparte («al cobrarse ganaría…») y suman cuando se cobren, o se pueden incluir con *Incluir servicios sin cobrar*. Lo anulado o reembolsado nunca cuenta. Un servicio compartido por varias cuenta solo la parte de cada una.
+- Mismas reglas que la Nómina (el % propio del servicio, si lo tiene, manda sobre el de la ficha). **No incluye propinas** (van en la Nómina).
+- **Exportar** el mes a Excel, PDF o CSV (resumen por manicurista + todos los servicios con su comisión).
 
 ## Caja
 
@@ -226,7 +236,7 @@ Los genera `pg_cron` dentro de Supabase cada 5 minutos (la migración 08 lo prog
 | `npm run e2e:gcal` | sincronización con Google Calendar contra un servidor simulado |
 | `npm run e2e:a11y` | escaneo de accesibilidad (axe) de la web y del panel |
 
-> Las suites nuevas `simultaneas`, `nomina`, `equipos` y `caja` (`node e2e/run-all.mjs simultaneas nomina equipos caja`) son **seguras con la base real**: solo crean y borran filas propias («E2E …», ventas de enero de 2020) y limpian hasta su rastro en Auditoría. Las demás sí modifican datos:
+> Las suites nuevas `simultaneas`, `nomina`, `equipos`, `caja` y `manicuristas` (`node e2e/run-all.mjs simultaneas nomina equipos caja manicuristas`) son **seguras con la base real**: solo crean y borran filas propias («E2E …», ventas de enero de 2020) y limpian hasta su rastro en Auditoría. Las demás sí modifican datos:
 >
 > ⚠ Las pruebas **E2E escriben y borran datos** en la base de `.env.local` y cambian (y restauran) algunos ajustes. Úsalas con un proyecto de Supabase de pruebas, no durante la operación real. Las suites antiguas (`public`, `admin-a/b/c`, `roles`…) usan las especialistas demo de la semilla, así que solo corren en un proyecto con datos demo; `simultaneas`, `nomina`, `equipos`, `exports` y `a11y` no las necesitan. La primera vez, `npx playwright install chromium`. Con la web corriendo (`npm run build && npm start`) ejecuta `npm run e2e`; crea y borra solas los usuarios `tmp-*@glow.test`.
 
