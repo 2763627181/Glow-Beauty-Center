@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   allocatePayments, buildTimeline, cashDifference, cashEffect, categoriesFor, changeOf, commissionFromSalonPct, countDenominations, expectedCash, needsDescription, needsEmployee,
-  parseCashReport, round2, salonPctFromCommission, splitProduction, suggestTenders,
+  parseCashReport, round2, salonPctFromCommission, splitChangeTip, splitProduction, suggestTenders,
 } from "./cash.ts";
 
 const cash = (value: number, key: number | string = 1) => ({ key, isCash: true, value });
@@ -197,4 +197,18 @@ test("línea de tiempo: cobros, reembolsos y movimientos juntos, lo más recient
   });
   assert.deepEqual(t.map((x) => x.key), ["r-c", "c-b", "m-m2", "m-m1", "c-a"]);
   assert.deepEqual(t.map(cashEffect), [-300, 0, 0, -50, 100]);
+});
+
+test("propina: de lo que sobra del efectivo sale primero la propina y solo el resto es vuelto para el cliente", () => {
+  // servicio de 800, el cliente da 900 y deja 100 de propina → no hay vuelto, la propina es de la especialista
+  assert.deepEqual(splitChangeTip(100, 100), { tipFromChange: 100, toClient: 0 });
+  // servicio de 1,700 con 2,000 y propina de 200 → propina 200 y vuelto 100
+  assert.deepEqual(splitChangeTip(300, 200), { tipFromChange: 200, toClient: 100 });
+  // sobra menos que la propina: lo que sobra es propina y el resto de la propina va aparte
+  assert.deepEqual(splitChangeTip(50, 200), { tipFromChange: 50, toClient: 0 });
+  // sin propina: todo es vuelto
+  assert.deepEqual(splitChangeTip(300, 0), { tipFromChange: 0, toClient: 300 });
+  assert.deepEqual(splitChangeTip(0, 200), { tipFromChange: 0, toClient: 0 });
+  assert.deepEqual(splitChangeTip(-5, -5), { tipFromChange: 0, toClient: 0 });
+  assert.deepEqual(splitChangeTip(0.3, 0.1), { tipFromChange: 0.1, toClient: 0.2 });
 });

@@ -47,8 +47,8 @@ export default async function SalePage({ params }: PageProps<"/admin/sales/[id]"
         ))}
         <div className={r.row}><span>Subtotal</span><span>{money(s.subtotal)}</span></div>
         {Number(s.discount) > 0 && <div className={r.row}><span>Descuento</span><span>−{money(s.discount)}</span></div>}
-        {Number(s.tip) > 0 && <div className={r.row}><span>Propina</span><span>{money(s.tip)}</span></div>}
         <div className={`${r.row} ${r.total}`}><span>Total</span><span>{money(s.total)}</span></div>
+        {Number(s.tip) > 0 && <div className={r.row}><span className={u.sub}>Propina (aparte: no está incluida en el total)</span><span className={u.sub}>{money(s.tip)}</span></div>}
         <h2 style={{ marginTop: 16, fontSize: "1.1rem" }}>Pagos</h2>
         {(s.payments as any[]).length === 0 ? <p className={u.sub}>Sin pagos registrados.</p> : (s.payments as any[]).map((p) => (
           <div key={p.id} className={r.row}>

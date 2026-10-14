@@ -57,7 +57,7 @@ export default async function ReportsPage({ searchParams }: PageProps<"/admin/re
         <section className={u.card}><h2>Ventas por especialista</h2><RankList rows={m.byEmployee} /></section>
         <section className={u.card}><h2>Ventas por método de pago</h2><RankList rows={m.byMethod} /></section>
         <section className={u.card}><h2>Comisiones por especialista</h2><p className={u.hint} style={{ marginBottom: 8 }}>Según el % de cada servicio o, si no tiene, el del especialista (configúralos en Servicios y Especialistas).</p><RankList rows={m.commissions} empty="Sin comisiones: define un % en los servicios o especialistas" /></section>
-        <section className={u.card}><h2>Propinas y descuentos</h2><RankList rows={[{ label: "Propinas", value: m.tips }, { label: "Descuentos otorgados", value: m.discounts }]} /></section>
+        <section className={u.card}><h2>Propinas y descuentos</h2><p className={u.hint} style={{ marginBottom: 8 }}>Las propinas no cuentan dentro de las ventas: se anotan aparte para la especialista.</p><RankList rows={[{ label: "Propinas", value: m.tips }, { label: "Descuentos otorgados", value: m.discounts }]} /></section>
         <section className={u.card}><h2>Servicios más vendidos (cantidad)</h2><RankList rows={m.byService.map((x) => ({ label: x.label, value: x.count ?? 0 })).sort((a, b) => b.value - a.value)} money={false} /></section>
         <section className={u.card}><h2>Clientes frecuentes</h2><RankList rows={m.frequentClients} money={false} /></section>
         <section className={u.card}><h2>Clientes con mayor gasto</h2><RankList rows={m.topClientsSpend} /></section>

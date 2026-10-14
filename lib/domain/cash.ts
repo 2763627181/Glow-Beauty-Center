@@ -60,6 +60,16 @@ export function allocatePayments(rows: TenderInput[], due: number): Tender {
   };
 }
 
+/**
+ * La propina no entra en la venta, pero muchas veces el cliente la deja en el mismo efectivo: de lo que sobra al cobrar (el «vuelto»),
+ * primero sale la propina para la especialista y solo el resto se le devuelve al cliente. Si sobra menos que la propina, la propina va aparte.
+ */
+export function splitChangeTip(change: number, tip: number): { tipFromChange: number; toClient: number } {
+  const c = Math.max(toCents(change), 0), t = Math.max(toCents(tip), 0);
+  const fromChange = Math.min(c, t);
+  return { tipFromChange: fromCents(fromChange), toClient: fromCents(c - fromChange) };
+}
+
 /** Atajos de «el cliente dio…»: el monto exacto y los billetes redondos siguientes (1,800 · 2,000 · 2,500…). */
 export function suggestTenders(pending: number): number[] {
   const p = toCents(pending);

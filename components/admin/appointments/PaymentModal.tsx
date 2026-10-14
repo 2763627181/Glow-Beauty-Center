@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { addPayment, setAppointmentStatus, updateAppointment } from "@/lib/actions/admin/appointments";
 import type { ApptRow } from "@/lib/data/appointments";
 import { money } from "@/lib/format";
+import { splitChangeTip } from "@/lib/domain/cash";
 import { Alert } from "../primitives";
 import { Modal, useToast } from "../overlay";
 import u from "../ui.module.css";
@@ -27,18 +28,18 @@ export function PaymentModal({ appt, onClose, onDone, completeByDefault = true }
   const [complete, setComplete] = useState(completeByDefault);
   const [overpay, setOverpay] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<{ charged: number; change: number } | null>(null);
+  const [done, setDone] = useState<{ charged: number; change: number; tip: number } | null>(null);
 
   const subtotal = useMemo(() => subtotalOf(lines), [lines]);
-  const total = subtotal - (Number(discount) || 0) + (Number(tip) || 0);
+  const total = subtotal - (Number(discount) || 0); // la propina NO entra en la venta
   const pendingAmt = Math.max(Math.round((total - appt.paid - settled) * 100) / 100, 0);
   const plan = usePaymentPlan(pays, pendingAmt);
   const { tender } = plan;
   const over = tender.overNonCash > 0.004;
 
-  function finish(charged: number, change: number) {
+  function finish(charged: number, change: number, tipPart: number) {
     onDone();
-    if (change > 0) setDone({ charged, change });
+    if (change > 0 || tipPart > 0) setDone({ charged, change, tip: tipPart });
     else onClose();
   }
 
@@ -48,7 +49,7 @@ export function PaymentModal({ appt, onClose, onDone, completeByDefault = true }
     if (bad) return setError(bad);
     if (plan.cashBlocked) return setError(CASH_CLOSED_MSG);
     if (over && !overpay) return setError("La tarjeta o transferencia supera lo pendiente. Marca la casilla para confirmar el sobrepago.");
-    const items = plan.items, change = tender.change;
+    const items = plan.items, { tipFromChange, toClient } = splitChangeTip(tender.change, Number(tip) || 0);
     start(async () => {
       const r = await updateAppointment(appt.id, { lines: linesToPayload(lines), discount: Number(discount) || 0, tip: Number(tip) || 0 });
       if (!r.ok) return setError(r.error);
@@ -66,19 +67,20 @@ export function PaymentModal({ appt, onClose, onDone, completeByDefault = true }
         if (!c.ok) return setError(`${c.error} (el cobro ya quedó registrado)`);
         toast(`Cita completada · venta ${c.saleNumber}`);
       } else toast(charged > 0 ? "Cobro registrado" : "Cambios guardados");
-      finish(charged, change);
+      finish(charged, toClient, tipFromChange);
     });
   }
 
   if (done) {
     return (
       <Modal open onClose={onClose} title="Cobro registrado">
-        <ChangeCard charged={done.charged} change={done.change} onClose={onClose} />
+        <ChangeCard charged={done.charged} change={done.change} tip={done.tip} onClose={onClose} />
       </Modal>
     );
   }
 
-  const label = tender.applied > 0 ? `Cobrar ${money(tender.applied)}${tender.change > 0 ? ` · vuelto ${money(tender.change)}` : ""}` : complete ? "Completar sin cobro" : "Guardar";
+  const split = splitChangeTip(tender.change, Number(tip) || 0);
+  const label = tender.applied > 0 ? `Cobrar ${money(tender.applied)}${split.toClient > 0 ? ` · vuelto ${money(split.toClient)}` : ""}${split.tipFromChange > 0 ? ` · propina ${money(split.tipFromChange)}` : ""}` : complete ? "Completar sin cobro" : "Guardar";
   return (
     <Modal open onClose={onClose} title={`Cobrar · ${appt.client.first_name}`} wide>
       <div className={u.grid}>
@@ -86,7 +88,7 @@ export function PaymentModal({ appt, onClose, onDone, completeByDefault = true }
 
         <div className={u.form2}>
           <div className={u.field}><label htmlFor="disc">Descuento (RD$)</label><input id="disc" type="number" step="any" min={0} inputMode="decimal" value={discount} onChange={(e) => setDiscount(e.target.value)} /></div>
-          <div className={u.field}><label htmlFor="tip">Propina (RD$)</label><input id="tip" type="number" step="any" min={0} inputMode="decimal" value={tip} onChange={(e) => setTip(e.target.value)} /></div>
+          <div className={u.field}><label htmlFor="tip">Propina (RD$)</label><input id="tip" type="number" step="any" min={0} inputMode="decimal" value={tip} onChange={(e) => setTip(e.target.value)} aria-describedby="tip-hint" /><span id="tip-hint" className={u.hint}>Aparte: no suma a la venta ni a lo que se cobra; es para la especialista.</span></div>
         </div>
 
         <div className={u.card} style={{ background: "var(--color-cream)" }}>
@@ -96,7 +98,7 @@ export function PaymentModal({ appt, onClose, onDone, completeByDefault = true }
           <div style={{ display: "flex", justifyContent: "space-between" }}><span>Pendiente</span><strong>{money(pendingAmt)}</strong></div>
         </div>
 
-        <PaymentRows rows={pays} onChange={setPays} pending={pendingAmt} plan={plan} />
+        <PaymentRows rows={pays} onChange={setPays} pending={pendingAmt} plan={plan} tip={Number(tip) || 0} />
 
         {over && <label style={{ display: "flex", gap: 8, alignItems: "center" }}><input type="checkbox" checked={overpay} onChange={(e) => setOverpay(e.target.checked)} /> Confirmo el pago mayor al pendiente ({money(tender.overNonCash)} de más)</label>}
         <label style={{ display: "flex", gap: 8, alignItems: "center" }}><input type="checkbox" checked={complete} onChange={(e) => setComplete(e.target.checked)} /> Completar la cita y generar la venta</label>

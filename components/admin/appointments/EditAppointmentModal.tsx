@@ -27,7 +27,7 @@ export function EditAppointmentModal({ appt, onClose, onSaved }: { appt: ApptRow
   const [error, setError] = useState<string | null>(null);
 
   const sub = subtotalOf(lines);
-  const total = sub - (Number(discount) || 0) + (Number(tip) || 0);
+  const total = sub - (Number(discount) || 0); // la propina NO entra en la venta
 
   function save() {
     setError(null);
@@ -60,7 +60,7 @@ export function EditAppointmentModal({ appt, onClose, onSaved }: { appt: ApptRow
 
         <div className={u.form2}>
           <div className={u.field}><label htmlFor="ea-disc">Descuento (RD$)</label><input id="ea-disc" type="number" step="any" min={0} inputMode="decimal" value={discount} onChange={(e) => setDiscount(e.target.value)} /></div>
-          <div className={u.field}><label htmlFor="ea-tip">Propina (RD$)</label><input id="ea-tip" type="number" step="any" min={0} inputMode="decimal" value={tip} onChange={(e) => setTip(e.target.value)} /></div>
+          <div className={u.field}><label htmlFor="ea-tip">Propina (RD$)</label><input id="ea-tip" type="number" step="any" min={0} inputMode="decimal" value={tip} onChange={(e) => setTip(e.target.value)} aria-describedby="ea-tip-hint" /><span id="ea-tip-hint" className={u.hint}>Aparte: no suma a la venta ni a lo que se cobra; es para la especialista.</span></div>
           <div className={`${u.field} ${u.span2}`}><label htmlFor="ea-notes">Notas</label><textarea id="ea-notes" maxLength={500} value={notes} onChange={(e) => setNotes(e.target.value)} /></div>
         </div>
 

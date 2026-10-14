@@ -144,8 +144,8 @@ try {
     start_time: iso(base + 201 * 36e5), discount: 100, tip: 50, notes: "editada",
     lines: [{ id: eLines[1].id, final_price: 650, employee_id: ana }, { id: eLines[0].id }, { name: "Shampoo", final_price: 400, quantity: 2 }],
   })])).rows[0].r;
-  // subtotal = 650 + 600 + 800 = 2050; − 100 + 50 = 2000 con propina
-  check("editar cita: total correcto (precio final, línea libre, descuento y propina)", Number(upd.total) === 2000, `total=${upd.total}`);
+  // subtotal = 650 + 600 + 800 = 2050; − 100 = 1950 (la propina de 50 se anota aparte y NO entra en el total)
+  check("editar cita: total correcto (precio final, línea libre y descuento; la propina no suma)", Number(upd.total) === 1950, `total=${upd.total}`);
   const ed = (await q("select estimated_total, notes, start_time from appointments where id=$1", [e1.id])).rows[0];
   check("editar cita: estimado = subtotal − descuento y notas guardadas", Number(ed.estimated_total) === 1950 && ed.notes === "editada");
   const timed = (await q("select position, start_time, end_time from appointment_services where appointment_id=$1 and start_time is not null order by position", [e1.id])).rows;
@@ -176,7 +176,7 @@ try {
   await q("select record_sale_payment($1, 1000, 'efectivo')", [done.sale_id]);
   check("pago parcial → venta 'parcial'", (await q("select payment_status from sales where id=$1", [done.sale_id])).rows[0].payment_status === "parcial");
   await expectErr("sobrepago sin confirmar se rechaza", "select record_sale_payment($1, 5000, 'tarjeta')", [done.sale_id], "overpayment");
-  await q("select record_sale_payment($1, 1000, 'tarjeta', 'ref-1')", [done.sale_id]);
+  await q("select record_sale_payment($1, 950, 'tarjeta', 'ref-1')", [done.sale_id]); // total 1,950: la propina de 50 no se cobra como parte de la venta
   check("saldo completo → 'pagado'", (await q("select payment_status from sales where id=$1", [done.sale_id])).rows[0].payment_status === "pagado");
   await expectErr("recepción NO puede anular ventas", "select void_sale($1, 'error')", [done.sale_id], "forbidden");
   await expectErr("recepción NO puede reembolsar", "select refund_payment((select id from payments where sale_id=$1 limit 1))", [done.sale_id], "forbidden");
@@ -826,19 +826,68 @@ try {
   /* ───────── número de especialista ───────── */
   console.log("\n— Número de especialista —");
   await asAdmin();
-  await q("insert into employees (full_name, employee_number, is_demo) values ('Num A', 90, false)");
-  check("número: se guarda en la ficha", (await q("select employee_number from employees where full_name='Num A'")).rows[0].employee_number === 90);
-  await expectErr("número: no se repite entre especialistas", "insert into employees (full_name, employee_number) values ('Num B', 90)", [], "employees_number_uidx");
+  // Números libres de esta base (en la real las especialistas ya usan algunos, p. ej. el 00): se eligen dinámicamente
+  const free = (await q("select g from generate_series(0, 99) g where g not in (select employee_number from employees where employee_number is not null) order by g desc limit 3")).rows.map((r) => r.g);
+  const [nA, nB, nC] = free; // tres números libres distintos
+  await q("insert into employees (full_name, employee_number, is_demo) values ('Num A', $1, false)", [nA]);
+  check("número: se guarda en la ficha", (await q("select employee_number from employees where full_name='Num A'")).rows[0].employee_number === nA);
+  await expectErr("número: no se repite entre especialistas", "insert into employees (full_name, employee_number) values ('Num B', $1)", [nA], "employees_number_uidx");
   await expectErr("número: solo de 0 a 99", "insert into employees (full_name, employee_number) values ('Num C', 100)", [], "employees_number_ck");
   await expectErr("número: no puede ser negativo", "insert into employees (full_name, employee_number) values ('Num D', -1)", [], "employees_number_ck");
   await q("insert into employees (full_name) values ('Sin número 1'), ('Sin número 2')");
   check("número: es opcional (varias especialistas pueden no tener)", (await q("select count(*) from employees where full_name like 'Sin número %' and employee_number is null")).rows[0].count === "2");
-  await q("insert into employees (full_name, employee_number, is_demo) values ('Cero', 0, false)");
-  check("número: el 00 es válido", (await q("select employee_number from employees where full_name='Cero'")).rows[0].employee_number === 0);
+  await q("insert into employees (full_name, employee_number, is_demo) values ('Otro', $1, false)", [nB]);
+  check("número: dos especialistas con números distintos conviven", (await q("select count(distinct employee_number) c from employees where full_name in ('Num A', 'Otro')")).rows[0].c === "2");
+  if ((await q("select count(*) c from employees where employee_number = 0")).rows[0].c === "0") {
+    await q("insert into employees (full_name, employee_number, is_demo) values ('Cero', 0, false)");
+    check("número: el 00 es válido", (await q("select employee_number from employees where full_name='Cero'")).rows[0].employee_number === 0);
+  } else check("número: el 00 es válido (ya lo usa una especialista)", (await q("select count(*) c from employees where employee_number = 0")).rows[0].c === "1");
+  void nC;
   await asAnon();
   await expectErr("número: la página pública NO lo puede leer", "select employee_number from employees", [], "permission denied");
   await asUser(uManager);
-  check("número: el gerente sí lo ve", (await q("select employee_number from employees where full_name='Num A'")).rows[0].employee_number === 90);
+  check("número: el gerente sí lo ve", (await q("select employee_number from employees where full_name='Num A'")).rows[0].employee_number === nA);
+  await asAdmin();
+
+  /* ───────── la propina no entra en la venta ───────── */
+  console.log("\n— Propina fuera de la venta —");
+  await asAdmin();
+  const apTip = (await q(...booking({ first_name: "Propina", last_name: "Cita", phone: "8095558901", employee_id: ana, source: "phone", start_time: iso(base + 500 * 36e5), services: [{ service_id: man }] }))).rows[0].r;
+  await asUser(uRecep);
+  const tipLine = (await q("select id from appointment_services where appointment_id=$1", [apTip.id])).rows[0].id;
+  const updTip = (await q("select update_appointment($1, $2::jsonb) r", [apTip.id, JSON.stringify({ discount: 50, tip: 200, lines: [{ id: tipLine }] })])).rows[0].r;
+  check("propina: el total de la cita es servicios − descuento (600 − 50), sin la propina", Number(updTip.total) === 550, "total " + updTip.total);
+  const apRow = (await q("select estimated_total, tip from appointments where id=$1", [apTip.id])).rows[0];
+  check("propina: la cita guarda la propina aparte", Number(apRow.estimated_total) === 550 && Number(apRow.tip) === 200);
+  await q("select record_payment($1, 550, 'tarjeta')", [apTip.id]);
+  await expectErr("propina: no se cobra como parte de la venta (550 + 200 es sobrepago)", "select record_payment($1, 200, 'tarjeta')", [apTip.id], "overpayment");
+  const saleTip = (await q("select complete_appointment($1) r", [apTip.id])).rows[0].r;
+  const stRow = (await q("select subtotal, discount, tip, total, payment_status from sales where id=$1", [saleTip.sale_id])).rows[0];
+  check("propina: la venta queda en 550 (600 − 50) y la propina de 200 aparte", Number(stRow.total) === 550 && Number(stRow.tip) === 200 && Number(stRow.subtotal) === 600 && Number(stRow.discount) === 50);
+  check("propina: cobrado el total sin la propina, la venta está pagada", stRow.payment_status === "pagado");
+  check("propina: el total final de la cita tampoco la incluye", Number((await q("select final_total from appointments where id=$1", [apTip.id])).rows[0].final_total) === 550);
+  const qsTip = (await q("select create_quick_sale($1::jsonb) r", [JSON.stringify({ tip: 100, items: [{ description: "Producto", quantity: 1, unit_price: 1000 }], payments: [{ method: "tarjeta", amount: 1000 }] })])).rows[0].r;
+  const qsRow = (await q("select total, tip, payment_status from sales where id=$1", [qsTip.sale_id])).rows[0];
+  check("propina: venta de mostrador de 1,000 con propina de 100 → total 1,000 y pagada", Number(qsRow.total) === 1000 && Number(qsRow.tip) === 100 && qsRow.payment_status === "pagado");
+  await expectErr("propina: en la venta de mostrador tampoco se cobra como parte de la venta", "select create_quick_sale($1::jsonb)", [JSON.stringify({ tip: 100, items: [{ description: "Producto", quantity: 1, unit_price: 1000 }], payments: [{ method: "tarjeta", amount: 1100 }] })], "overpayment");
+  // ventas anteriores a este cambio (la propina estaba dentro del total): se corrigen y no se vuelven a tocar
+  await asAdmin();
+  const legacy = async (n, sub, tip, paid, status = "pagado") => {
+    const s = (await q("insert into sales (sale_number, subtotal, discount, tip, total, payment_status) values ($1,$2,0,$3,$4,$5) returning id", [n, sub, tip, sub + tip, status])).rows[0].id;
+    if (paid) await q("insert into payments (sale_id, amount, method) values ($1,$2,'efectivo')", [s, paid]);
+    return s;
+  };
+  const pl1 = await legacy("T-PROP-1", 800, 100, 900), pl2 = await legacy("T-PROP-2", 1000, 100, 600, "parcial"), pl3 = await legacy("T-PROP-3", 500, 0, 0, "pendiente");
+  const pl4 = await legacy("T-PROP-4", 700, 50, 0, "reembolsado");
+  await q("update sales set voided_at = now(), void_reason = 'prueba' where id=$1", [pl4]);
+  const fixed = Number((await q("select _exclude_tips_from_totals() n")).rows[0].n);
+  const tot = async (id) => (await q("select total, payment_status from sales where id=$1", [id])).rows[0];
+  check("propina (ventas anteriores): el total deja de incluir la propina", fixed >= 3 && Number((await tot(pl1)).total) === 800 && Number((await tot(pl2)).total) === 1000 && Number((await tot(pl4)).total) === 700);
+  check("propina (ventas anteriores): lo cobrado no se toca y el estado se recalcula", (await tot(pl1)).payment_status === "pagado" && (await tot(pl2)).payment_status === "parcial" && (await q("select sum(amount) s from payments where sale_id=$1", [pl1])).rows[0].s === "900.00");
+  check("propina (ventas anteriores): una venta sin propina o anulada no cambia de estado", Number((await tot(pl3)).total) === 500 && (await tot(pl4)).payment_status === "reembolsado");
+  check("propina (ventas anteriores): correrlo otra vez no vuelve a restar", Number((await q("select _exclude_tips_from_totals() n")).rows[0].n) === 0 && Number((await tot(pl1)).total) === 800);
+  await asUser(uRecep);
+  await expectErr("propina: la función de corrección no la puede llamar el personal", "select _exclude_tips_from_totals()", [], "permission denied");
   await asAdmin();
 
 } catch (e) {

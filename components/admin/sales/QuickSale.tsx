@@ -10,6 +10,7 @@ import { Alert } from "../primitives";
 import { NumInput } from "../NumInput";
 import { Modal, useToast } from "../overlay";
 import u from "../ui.module.css";
+import { splitChangeTip } from "@/lib/domain/cash";
 import { ChangeCard } from "./ChangeCard";
 import { CASH_CLOSED_MSG, newPayRow, PaymentRows, usePaymentPlan, type PayRow } from "./PaymentRows";
 
@@ -45,13 +46,14 @@ function QuickSaleModal({ onClose }: { onClose: () => void }) {
   const [pays, setPays] = useState<PayRow[]>([newPayRow(paymentMethods[0].key)]);
   const [overpay, setOverpay] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<{ saleId: string; charged: number; change: number } | null>(null);
+  const [done, setDone] = useState<{ saleId: string; charged: number; change: number; tip: number } | null>(null);
 
   const subtotal = useMemo(() => lines.reduce((t, l) => t + l.quantity * l.unit_price, 0), [lines]);
-  const total = subtotal - (Number(discount) || 0) + (Number(tip) || 0);
+  const total = subtotal - (Number(discount) || 0); // la propina NO entra en la venta
   const plan = usePaymentPlan(pays, Math.max(Math.round(total * 100) / 100, 0));
   const { tender } = plan;
   const over = tender.overNonCash > 0.004;
+  const split = splitChangeTip(tender.change, Number(tip) || 0);
   const set = (key: string, patch: Partial<Line>) => setLines((l) => l.map((x) => (x.key === key ? { ...x, ...patch } : x)));
 
   async function lookup() {
@@ -67,7 +69,7 @@ function QuickSaleModal({ onClose }: { onClose: () => void }) {
     if ((Number(discount) || 0) > subtotal) return setError("El descuento no puede superar el subtotal.");
     if (plan.cashBlocked) return setError(CASH_CLOSED_MSG);
     if (over && !overpay) return setError("La tarjeta o transferencia supera el total. Marca la casilla para confirmar el sobrepago.");
-    const charged = tender.applied, change = tender.change;
+    const charged = tender.applied, { tipFromChange, toClient } = splitChangeTip(tender.change, Number(tip) || 0);
     start(async () => {
       const r = await createQuickSale({
         client_id: client?.id ?? null, employee_id: emp || null, discount: Number(discount) || 0, tip: Number(tip) || 0, notes: notes || undefined, allow_overpay: overpay,
@@ -76,7 +78,7 @@ function QuickSaleModal({ onClose }: { onClose: () => void }) {
       });
       if (!r.ok) return setError(r.error);
       toast(`Venta ${r.saleNumber} registrada`);
-      if (change > 0) return setDone({ saleId: r.saleId, charged, change }); // el vuelto queda a la vista hasta que se entregue
+      if (toClient > 0 || tipFromChange > 0) return setDone({ saleId: r.saleId, charged, change: toClient, tip: tipFromChange }); // el vuelto y la propina quedan a la vista hasta que se entreguen
       onClose();
       router.push(`/admin/sales/${r.saleId}`);
     });
@@ -86,7 +88,7 @@ function QuickSaleModal({ onClose }: { onClose: () => void }) {
     const close = () => { onClose(); router.push(`/admin/sales/${done.saleId}`); };
     return (
       <Modal open onClose={close} title="Venta registrada">
-        <ChangeCard charged={done.charged} change={done.change} label="Venta cobrada" onClose={close} />
+        <ChangeCard charged={done.charged} change={done.change} tip={done.tip} label="Venta cobrada" onClose={close} />
       </Modal>
     );
   }
@@ -138,7 +140,7 @@ function QuickSaleModal({ onClose }: { onClose: () => void }) {
             <Button size="sm" variant="soft" disabled={!custom.name.trim() || custom.price === "" || Number(custom.price) < 0} onClick={() => { setLines((l) => [...l, { key: k(), description: custom.name.trim(), quantity: 1, unit_price: Number(custom.price), service_id: null }]); setCustom({ name: "", price: "" }); }}>Agregar</Button>
           </div>
           <div className={u.field}><label htmlFor="qs-d">Descuento (RD$)</label><input id="qs-d" type="number" step="any" min={0} inputMode="decimal" value={discount} onChange={(e) => setDiscount(e.target.value)} /></div>
-          <div className={u.field}><label htmlFor="qs-t">Propina (RD$)</label><input id="qs-t" type="number" step="any" min={0} inputMode="decimal" value={tip} onChange={(e) => setTip(e.target.value)} /></div>
+          <div className={u.field}><label htmlFor="qs-t">Propina (RD$)</label><input id="qs-t" type="number" step="any" min={0} inputMode="decimal" value={tip} onChange={(e) => setTip(e.target.value)} aria-describedby="qs-t-hint" /><span id="qs-t-hint" className={u.hint}>Aparte: no suma a la venta ni a lo que se cobra; es para la especialista.</span></div>
           <div className={`${u.field} ${u.span2}`}><label htmlFor="qs-n">Nota</label><input id="qs-n" maxLength={500} value={notes} onChange={(e) => setNotes(e.target.value)} /></div>
         </div>
 
@@ -146,10 +148,10 @@ function QuickSaleModal({ onClose }: { onClose: () => void }) {
           <div style={{ display: "flex", justifyContent: "space-between" }}><span>Subtotal</span><span>{money(subtotal)}</span></div>
           <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: "1.2rem" }}><span>Total</span><span>{money(Math.max(total, 0))}</span></div>
         </div>
-        <PaymentRows rows={pays} onChange={setPays} pending={Math.max(total, 0)} plan={plan} />
+        <PaymentRows rows={pays} onChange={setPays} pending={Math.max(total, 0)} plan={plan} tip={Number(tip) || 0} />
         {over && <label style={{ display: "flex", gap: 8, alignItems: "center" }}><input type="checkbox" checked={overpay} onChange={(e) => setOverpay(e.target.checked)} /> Confirmo el pago mayor al total ({money(tender.overNonCash)} de más)</label>}
         {error && !(error === CASH_CLOSED_MSG && !plan.cashBlocked) && <Alert>{error}</Alert>}
-        <Button block onClick={submit} disabled={pending || !lines.length}>{pending ? "Registrando…" : tender.applied > 0 ? `Registrar venta y cobrar ${money(tender.applied)}${tender.change > 0 ? ` · vuelto ${money(tender.change)}` : ""}` : "Registrar venta (sin cobro)"}</Button>
+        <Button block onClick={submit} disabled={pending || !lines.length}>{pending ? "Registrando…" : tender.applied > 0 ? `Registrar venta y cobrar ${money(tender.applied)}${split.toClient > 0 ? ` · vuelto ${money(split.toClient)}` : ""}${split.tipFromChange > 0 ? ` · propina ${money(split.tipFromChange)}` : ""}` : "Registrar venta (sin cobro)"}</Button>
       </div>
     </Modal>
   );

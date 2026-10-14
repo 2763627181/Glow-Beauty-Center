@@ -75,7 +75,7 @@ export function AppointmentModal({ appt, onClose }: { appt: ApptRow | null; onCl
           </ul>
           <p>
             {appt.discount > 0 && <span className={u.sub}>Descuento −{money(appt.discount)} · </span>}
-            {appt.tip > 0 && <span className={u.sub}>Propina {money(appt.tip)} · </span>}
+            {appt.tip > 0 && <span className={u.sub}>Propina (aparte) {money(appt.tip)} · </span>}
             {allowed(role, "seeMoney") && <><strong>Total {money(total)}</strong>{appt.paid > 0 && <span className={u.sub}> · pagado {money(appt.paid)}</span>}</>}
           </p>
           {appt.notes && <p className={u.sub}>Nota del cliente: {appt.notes}</p>}

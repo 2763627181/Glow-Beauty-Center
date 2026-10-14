@@ -43,7 +43,7 @@ export default async function AppointmentPage({ params }: PageProps<"/admin/appo
             ))}
           </ul>
           {a.discount > 0 && money$ && <p>Descuento: −{money(a.discount)}</p>}
-          {a.tip > 0 && money$ && <p>Propina: {money(a.tip)}</p>}
+          {a.tip > 0 && money$ && <p className={u.sub}>Propina (aparte, no suma al total): {money(a.tip)}</p>}
           {money$ && <p><strong>Total: {money(apptTotal(a))}</strong></p>}
           <p className={u.sub}>Teléfono {a.client.phone} · {s.role !== "specialist" && <Link className={u.link} href={`/admin/clients/${a.client_id}`}>Ver cliente</Link>}</p>
           {a.notes && <p className={u.sub}>Nota del cliente: {a.notes}</p>}

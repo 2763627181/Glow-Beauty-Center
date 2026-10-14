@@ -2,7 +2,7 @@
 
 import { useId, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
-import { allocatePayments, round2, suggestTenders, type Tender } from "@/lib/domain/cash";
+import { allocatePayments, round2, splitChangeTip, suggestTenders, type Tender } from "@/lib/domain/cash";
 import { money } from "@/lib/format";
 import { useAdmin } from "../AdminContext";
 import { OpenCashModal } from "../cash/OpenCashModal";
@@ -46,7 +46,7 @@ export function usePaymentPlan(rows: PayRow[], pending: number): PaymentPlan {
 
 export const CASH_CLOSED_MSG = "Para cobrar en efectivo primero abre la caja.";
 
-export function PaymentRows({ rows, onChange, pending, plan }: { rows: PayRow[]; onChange: (r: PayRow[]) => void; pending: number; plan: PaymentPlan }) {
+export function PaymentRows({ rows, onChange, pending, plan, tip = 0 }: { rows: PayRow[]; onChange: (r: PayRow[]) => void; pending: number; plan: PaymentPlan; /** Propina anotada (aparte: no suma a lo que se cobra). */ tip?: number }) {
   const { paymentMethods, cash } = useAdmin();
   const uid = useId();
   const [openCashModal, setOpenCashModal] = useState(false);
@@ -60,6 +60,7 @@ export function PaymentRows({ rows, onChange, pending, plan }: { rows: PayRow[];
     if (tender.rows[i].isCash) room = Math.max(round2(room - tender.rows[i].applied), 0);
   }
   const hasCash = tender.rows.some((t) => t.isCash);
+  const { tipFromChange, toClient } = splitChangeTip(tender.change, tip);
 
   return (
     <fieldset className={p.rows}>
@@ -103,7 +104,7 @@ export function PaymentRows({ rows, onChange, pending, plan }: { rows: PayRow[];
                 {typed > 0 && (
                   <div className={p.result} aria-live="polite">
                     <span>Cobrado en efectivo: <strong>{money(t.applied)}</strong></span>
-                    <span>Vuelto: <strong className={t.change > 0 ? p.changeNow : undefined}>{money(t.change)}</strong></span>
+                    {tip > 0 ? <span>Sobra del efectivo: <strong>{money(t.change)}</strong></span> : <span>Vuelto: <strong className={t.change > 0 ? p.changeNow : undefined}>{money(t.change)}</strong></span>}
                   </div>
                 )}
               </>
@@ -123,7 +124,9 @@ export function PaymentRows({ rows, onChange, pending, plan }: { rows: PayRow[];
         {tender.cashReceived > 0 && <div className={p.line}><span>Efectivo recibido</span><span>{money(tender.cashReceived)}</span></div>}
         {tender.nonCash > 0 && <div className={p.line}><span>Tarjeta / transferencia (cobrado aparte)</span><span>{money(tender.nonCash)}</span></div>}
         <div className={p.line}><span>Se cobra ahora</span><strong>{money(tender.applied)}</strong></div>
-        {hasCash && <div className={`${p.line} ${p.change} ${tender.change > 0 ? p.changeOn : ""}`}><span>Vuelto a entregar</span><span>{money(tender.change)}</span></div>}
+        {tip > 0 && <div className={p.line}><span>Propina (aparte: no suma a la venta)</span><span>{money(tip)}</span></div>}
+        {hasCash && tipFromChange > 0 && <div className={p.line}><span>De lo que sobra del efectivo: propina para la especialista</span><span>{money(tipFromChange)}</span></div>}
+        {hasCash && <div className={`${p.line} ${p.change} ${toClient > 0 ? p.changeOn : ""}`}><span>Vuelto a entregar</span><span>{money(toClient)}</span></div>}
         <div className={p.line}><span>Quedará pendiente</span><span>{money(tender.remaining)}</span></div>
       </div>
 
