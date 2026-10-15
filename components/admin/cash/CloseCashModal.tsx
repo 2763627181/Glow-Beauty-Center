@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/Button";
 import { closeCash } from "@/lib/actions/admin/cash";
-import { cashDifference, countDenominations, DENOMINATIONS, type CashTotals } from "@/lib/domain/cash";
+import { cashDifference, collectedTotals, countDenominations, DENOMINATIONS, type CashMethodRow, type CashTotals } from "@/lib/domain/cash";
 import { money } from "@/lib/format";
 import { NumInput } from "../NumInput";
 import { Alert } from "../primitives";
@@ -13,7 +13,9 @@ import u from "../ui.module.css";
 import c from "./cash.module.css";
 
 /** Cerrar la caja: se cuenta el efectivo, se compara con lo que el sistema espera y, si hay diferencia, se explica en una nota. */
-export function CloseCashModal({ totals, onClose }: { totals: CashTotals; onClose: () => void }) {
+export function CloseCashModal({ totals, methods, onClose }: { totals: CashTotals; methods: CashMethodRow[]; onClose: () => void }) {
+  const col = collectedTotals(methods);
+  const aside = col.lines.filter((l) => !l.is_cash && l.net !== 0);
   const router = useRouter();
   const toast = useToast();
   const [busy, start] = useTransition();
@@ -48,6 +50,13 @@ export function CloseCashModal({ totals, onClose }: { totals: CashTotals; onClos
           {totals.salidas > 0 && <div><span>− Salidas de efectivo</span><span>{money(totals.salidas)}</span></div>}
           <div><strong>Efectivo que debería haber</strong><strong>{money(totals.expected)}</strong></div>
         </div>
+
+        <div className={c.summaryGrid} aria-label="Total cobrado en el turno">
+          <div><span>Efectivo cobrado</span><span>{money(col.cash)}</span></div>
+          {aside.map((l) => <div key={l.method}><span>{l.label} (cobrado aparte)</span><span>{money(l.net)}</span></div>)}
+          <div><strong>Total cobrado en el turno (todos los métodos)</strong><strong>{money(col.total)}</strong></div>
+        </div>
+        <p className={u.hint}>Para cuadrar la gaveta solo cuenta el efectivo; las transferencias y la tarjeta se verifican en el banco o en el datáfono.</p>
 
         <div className={u.field}>
           <label htmlFor="cc-counted">Efectivo que contaste (RD$)</label>

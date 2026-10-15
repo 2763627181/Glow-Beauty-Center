@@ -58,7 +58,7 @@ function TimelineLine({ row, onVoid, who }: { row: TimelineRow; onVoid?: (m: Cas
   }
   const p = row.payment;
   const change = changeOf(p);
-  const what = p.sale_id ? <Link className={u.link} href={`/admin/sales/${p.sale_id}`}>{p.sale_number}</Link> : p.appointment_id ? <Link className={u.link} href={`/admin/appointments/${p.appointment_id}`}>Cita</Link> : "—";
+  const what = p.sale_id ? <Link className={u.link} href={`/admin/sales/${p.sale_id}`}>Factura {p.sale_number}</Link> : p.appointment_id ? <Link className={u.link} href={`/admin/appointments/${p.appointment_id}`}>Cita</Link> : "—";
   const refund = row.type === "reembolso";
   return (
     <tr>
@@ -67,7 +67,7 @@ function TimelineLine({ row, onVoid, who }: { row: TimelineRow; onVoid?: (m: Cas
         <span className={`${c.tag} ${p.is_cash ? c.tagCash : ""}`}>{p.is_cash ? "Efectivo" : "Cobrado aparte"}</span> {refund ? "Reembolso" : "Cobro"} · {p.label}
       </td>
       <td data-label="Detalle">
-        {what}{p.client ? ` · ${p.client}` : ""}
+        {what} · <strong>{p.client ?? "Mostrador"}</strong>
         {!refund && p.is_cash && p.tendered != null && p.tendered > p.amount && <div className={u.hint}>Recibido {money(p.tendered)} · vuelto {money(change)}</div>}
         {p.reference && <div className={u.hint}>Ref. {p.reference}</div>}
         {refund && !p.is_cash && <div className={u.hint}>Se devuelve aparte (no sale de la caja)</div>}

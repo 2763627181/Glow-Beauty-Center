@@ -31,7 +31,7 @@ export function QuickSale() {
 }
 
 function QuickSaleModal({ onClose }: { onClose: () => void }) {
-  const { options, products, staff, paymentMethods } = useAdmin();
+  const { options, products, staff, paymentMethods, saleNames } = useAdmin();
   const router = useRouter();
   const toast = useToast();
   const [pending, start] = useTransition();
@@ -39,6 +39,7 @@ function QuickSaleModal({ onClose }: { onClose: () => void }) {
   const [custom, setCustom] = useState({ name: "", price: "" });
   const [phone, setPhone] = useState("");
   const [client, setClient] = useState<{ id: string; name: string } | null>(null);
+  const [customerName, setCustomerName] = useState("");
   const [emp, setEmp] = useState("");
   const [discount, setDiscount] = useState("");
   const [tip, setTip] = useState("");
@@ -72,7 +73,7 @@ function QuickSaleModal({ onClose }: { onClose: () => void }) {
     const charged = tender.applied, { tipFromChange, toClient } = splitChangeTip(tender.change, Number(tip) || 0);
     start(async () => {
       const r = await createQuickSale({
-        client_id: client?.id ?? null, employee_id: emp || null, discount: Number(discount) || 0, tip: Number(tip) || 0, notes: notes || undefined, allow_overpay: overpay,
+        client_id: client?.id ?? null, customer_name: client ? undefined : customerName.trim() || undefined, employee_id: emp || null, discount: Number(discount) || 0, tip: Number(tip) || 0, notes: notes || undefined, allow_overpay: overpay,
         items: lines.map((l) => ({ description: l.description.trim(), quantity: l.quantity, unit_price: l.unit_price, service_id: l.service_id })),
         payments: plan.items.map((p) => ({ amount: p.amount, method: p.method, reference: p.reference, tendered: p.tendered })),
       });
@@ -101,6 +102,9 @@ function QuickSaleModal({ onClose }: { onClose: () => void }) {
           <div className={u.field}><label htmlFor="qs-phone">Cliente (opcional, por teléfono)</label>
             <input id="qs-phone" type="tel" inputMode="tel" value={phone} onChange={(e) => { setPhone(e.target.value); setClient(null); }} onBlur={lookup} placeholder="809-555-5555" />
             {client && <span className={u.hint}>Cliente: {client.name}</span>}</div>
+          {saleNames && <div className={u.field}><label htmlFor="qs-name">Nombre del cliente (opcional)</label>
+            <input id="qs-name" maxLength={80} value={client ? client.name : customerName} disabled={!!client} onChange={(e) => setCustomerName(e.target.value)} placeholder="Ej.: María Pérez" aria-describedby="qs-name-h" />
+            <span id="qs-name-h" className={u.hint}>Sale en la factura y en la caja. Si el cliente está registrado, búscalo por teléfono.</span></div>}
           <div className={u.field}><label htmlFor="qs-emp">Atendió (opcional)</label>
             <select id="qs-emp" value={emp} onChange={(e) => setEmp(e.target.value)}><option value="">—</option>{staff.filter((s) => s.active).map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</select></div>
         </div>

@@ -7,7 +7,7 @@ import { groupLines } from "../domain/serviceLines.ts";
 import type { ApptRow } from "../data/appointments.ts";
 import type { PayrollLine, PayrollRun } from "../data/payroll.ts";
 import { apptSubtotal, apptTotal } from "../data/appointment-math.ts";
-import { buildTimeline, changeOf, MOVE_LABEL, splitProduction, type CashReport, type TimelineRow } from "../domain/cash.ts";
+import { buildTimeline, changeOf, collectedTotals, MOVE_LABEL, splitProduction, type CashReport, type TimelineRow } from "../domain/cash.ts";
 import { periodLabel as maniPeriodLabel, type ManiSummary, type Period } from "../domain/manicurists.ts";
 import { staffLabel } from "../domain/staffLabel.ts";
 import { periodLabel } from "../domain/payroll.ts";
@@ -428,7 +428,8 @@ export function paySlipDoc(run: PayrollRun, line: PayrollLine, ctx: Ctx): Export
 /* ═════════════════════════════ CAJA (cierre de turno) ═════════════════════════════ */
 export function cashDoc(r: CashReport, ctx: Ctx): ExportDoc {
   const s = r.session, t = r.totals, closed = s.closed_at != null;
-  const aside = round2(r.methods.filter((m) => !m.is_cash).reduce((sum, m) => sum + m.total - m.refunded, 0));
+  const got = collectedTotals(r.methods);
+  const aside = got.nonCash;
   const dt = (iso: string) => `${fmtDate(iso, { day: "numeric", month: "short", year: "numeric" })}, ${fmtTime(iso)}`;
   const summary: R[] = [
     { c: "Fondo inicial", m: t.opening },
@@ -438,6 +439,10 @@ export function cashDoc(r: CashReport, ctx: Ctx): ExportDoc {
     { c: "Salidas de efectivo", m: -t.salidas },
     { c: "Efectivo que debía haber", m: t.expected },
     ...(closed ? [{ c: "Efectivo contado", m: s.counted_cash }, { c: s.difference == null || s.difference === 0 ? "Diferencia" : s.difference < 0 ? "Diferencia (faltante)" : "Diferencia (sobrante)", m: s.difference }] : []),
+    // lo cobrado aparte (transferencias, tarjeta…) y el total de todos los métodos, para ver cuánto se cobró en el turno
+    { c: "Efectivo cobrado en el turno", m: got.cash },
+    ...got.lines.filter((l) => !l.is_cash && l.net !== 0).map((l) => ({ c: `${l.label} (cobrado aparte)`, m: l.net })),
+    { c: "Total cobrado en el turno (todos los métodos)", m: got.total },
   ];
   const methods: R[] = r.methods.map((m) => ({ metodo: m.label, tipo: m.is_cash ? "Entra a la caja" : "Cobrado aparte", n: m.count, total: m.total, ref: m.refunded }));
   const flow: R[] = buildTimeline(r).filter((x) => x.type !== "movimiento").map((x) => {
@@ -466,12 +471,12 @@ export function cashDoc(r: CashReport, ctx: Ctx): ExportDoc {
     kpis: [
       { label: "Debía haber", value: t.expected, kind: "money" },
       ...(closed ? [{ label: "Se contó", value: s.counted_cash ?? 0, kind: "money" as const }, { label: "Diferencia", value: s.difference ?? 0, kind: "money" as const }] : []),
-      { label: "Efectivo cobrado", value: t.cash_in, kind: "money" }, { label: "Tarjeta y transferencia (aparte)", value: aside, kind: "money" },
+      { label: "Total cobrado (todos los métodos)", value: got.total, kind: "money" }, { label: "Efectivo cobrado", value: t.cash_in, kind: "money" }, { label: "Transferencias y tarjeta (aparte)", value: aside, kind: "money" },
       { label: "Entradas", value: t.entradas, kind: "money" }, { label: "Salidas", value: t.salidas, kind: "money" },
       { label: "Ventas del turno", value: r.sales.total, kind: "money" }, { label: "Propinas", value: r.sales.tips, kind: "money" },
     ],
     sections: [
-      { name: "Cuadre", title: "Cuadre del efectivo", subtitle: "Fondo + cobrado + entradas − reembolsos − salidas", columns: [col("c", "Concepto", { width: 36 }), col("m", "Monto", { kind: "money" })], rows: summary },
+      { name: "Cuadre", title: "Cuadre del efectivo", subtitle: "Fondo + cobrado + entradas − reembolsos − salidas (cuadre del efectivo), y el total cobrado con todos los métodos", columns: [col("c", "Concepto", { width: 36 }), col("m", "Monto", { kind: "money" })], rows: summary },
       { name: "Por método", title: "Cobrado por método de pago", subtitle: "Tarjeta y transferencia se cobran aparte: aquí solo se registran y no entran a la caja", columns: [col("metodo", "Método", { width: 22 }), col("tipo", "Tipo", { width: 18 }), col("n", "Cobros", { kind: "int", total: "sum" }), col("total", "Cobrado", { kind: "money", total: "sum" }), col("ref", "Reembolsado", { kind: "money", total: "sum" })], rows: methods, totals: { label: "Total" }, emptyText: "No hubo cobros en este turno." },
       { name: "Cobros", title: "Cobros y reembolsos", columns: [col("hora", "Hora", { kind: "datetime" }), col("tipo", "Tipo"), col("venta", "Venta"), col("cliente", "Cliente", { width: 24 }), col("metodo", "Método"), col("lugar", "Cómo se cobró"), col("monto", "Monto", { kind: "money" }), col("recibido", "Recibido", { kind: "money" }), col("vuelto", "Vuelto", { kind: "money" }), col("ref", "Referencia", { pdf: false }), col("por", "Cobró", { pdf: false })], rows: flow, emptyText: "No hubo cobros en este turno." },
       { name: "Entradas y salidas", title: "Entradas y salidas de efectivo", columns: [col("hora", "Hora", { kind: "datetime" }), col("tipo", "Tipo"), col("cat", "Categoría", { width: 26 }), col("emp", "Especialista", { width: 22 }), col("det", "Detalle", { width: 30 }), col("monto", "Monto", { kind: "money" }), col("estado", "Estado"), col("motivo", "Motivo de anulación", { pdf: false }), col("por", "Registró", { pdf: false })], rows: moves, emptyText: "No hubo entradas ni salidas de efectivo." },

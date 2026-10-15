@@ -41,7 +41,7 @@ export default async function SalePage({ params }: PageProps<"/admin/sales/[id]"
       <div style={{ marginBottom: 16 }}><SaleActions saleId={s.id} pending={pending} voided={voided} notes={s.notes ?? ""} /></div>
       <section className={`${u.card} ${r.receipt}`}>
         <div className={r.biz}><strong>{settings.business.name}</strong>{settings.business.address && <span className={u.sub}>{settings.business.address}</span>}</div>
-        <p className={u.sub}>Cliente: {s.client ? `${s.client.first_name} ${s.client.last_name}` : "Mostrador"}{s.employee?.full_name ? ` · Atendió: ${s.employee.full_name}` : ""}</p>
+        <p className={u.sub}>Cliente: {s.client ? `${s.client.first_name} ${s.client.last_name}` : s.customer_name ?? "Mostrador"}{s.employee?.full_name ? ` · Atendió: ${s.employee.full_name}` : ""}</p>
         {(s.sale_items as any[]).map((i) => (
           <div key={i.id} className={r.row}><span>{i.description}{i.quantity > 1 && ` ×${i.quantity}`}{i.employee?.full_name && <span className={u.sub}> · {i.employee.full_name}</span>}</span><span>{money(i.total)}</span></div>
         ))}

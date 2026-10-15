@@ -2,6 +2,7 @@ import "server-only";
 import { parseCashReport, type CashReport } from "@/lib/domain/cash";
 import { drToISO, todayISO } from "@/lib/format";
 import { createClient } from "@/lib/supabase/server";
+import { nameCol, saleNamesInstalled } from "./sale-names";
 import { listAppointments, type ApptRow } from "./appointments";
 
 export type CashSessionRow = {
@@ -72,7 +73,8 @@ export async function getChargeQueue(): Promise<{ appointments: ApptRow[]; sales
     listAppointments({ status: ["en_espera", "en_servicio"], limit: 100 }),
     (async () => {
       const sb = await createClient();
-      return sb.from("sales").select("id,sale_number,total,completed_at,client:clients(first_name,last_name),payments(amount,status)")
+      const names = await saleNamesInstalled();
+      return sb.from("sales").select(`id,sale_number,total,completed_at,${nameCol(names)}client:clients(first_name,last_name),payments(amount,status)`)
         .in("payment_status", ["pendiente", "parcial"]).is("voided_at", null).order("completed_at", { ascending: false }).limit(60);
     })(),
   ]);
@@ -83,7 +85,7 @@ export async function getChargeQueue(): Promise<{ appointments: ApptRow[]; sales
   const sales: OwedSale[] = (salesRes.data ?? []).map((s: any) => ({
     id: s.id, sale_number: s.sale_number, completed_at: s.completed_at, total: Number(s.total),
     paid: (s.payments ?? []).filter((p: any) => p.status === "pagado").reduce((t: number, p: any) => t + Number(p.amount), 0),
-    client: s.client ? `${s.client.first_name} ${s.client.last_name}`.trim() : "Mostrador",
+    client: s.client ? `${s.client.first_name} ${s.client.last_name}`.trim() : s.customer_name ?? "Mostrador",
   }));
   return { appointments, sales };
 }

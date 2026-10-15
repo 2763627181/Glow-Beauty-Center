@@ -70,6 +70,18 @@ export function splitChangeTip(change: number, tip: number): { tipFromChange: nu
   return { tipFromChange: fromCents(fromChange), toClient: fromCents(c - fromChange) };
 }
 
+/**
+ * Total cobrado en un turno CONTANDO todos los métodos (efectivo, transferencias, tarjeta…), neto de lo reembolsado en el turno.
+ * El cuadre de la gaveta sigue siendo solo con el efectivo (lo demás no está en la caja), pero el dueño también ve el total.
+ */
+export type CollectedLine = { method: string; label: string; is_cash: boolean; net: number };
+export type Collected = { total: number; cash: number; nonCash: number; lines: CollectedLine[] };
+export function collectedTotals(methods: { method: string; label: string; is_cash: boolean; total: number; refunded: number }[]): Collected {
+  const lines = methods.map((m) => ({ method: m.method, label: m.label, is_cash: m.is_cash, net: fromCents(toCents(m.total) - toCents(m.refunded)) }));
+  const sum = (pick: (l: CollectedLine) => boolean) => fromCents(lines.filter(pick).reduce((t, l) => t + toCents(l.net), 0));
+  return { total: sum(() => true), cash: sum((l) => l.is_cash), nonCash: sum((l) => !l.is_cash), lines };
+}
+
 /** Atajos de «el cliente dio…»: el monto exacto y los billetes redondos siguientes (1,800 · 2,000 · 2,500…). */
 export function suggestTenders(pending: number): number[] {
   const p = toCents(pending);

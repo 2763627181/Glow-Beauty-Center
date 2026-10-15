@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  allocatePayments, buildTimeline, cashDifference, cashEffect, categoriesFor, changeOf, commissionFromSalonPct, countDenominations, expectedCash, needsDescription, needsEmployee,
+  allocatePayments, buildTimeline, cashDifference, cashEffect, categoriesFor, collectedTotals, changeOf, commissionFromSalonPct, countDenominations, expectedCash, needsDescription, needsEmployee,
   parseCashReport, round2, salonPctFromCommission, splitChangeTip, splitProduction, suggestTenders,
 } from "./cash.ts";
 
@@ -211,4 +211,15 @@ test("propina: de lo que sobra del efectivo sale primero la propina y solo el re
   assert.deepEqual(splitChangeTip(0, 200), { tipFromChange: 0, toClient: 0 });
   assert.deepEqual(splitChangeTip(-5, -5), { tipFromChange: 0, toClient: 0 });
   assert.deepEqual(splitChangeTip(0.3, 0.1), { tipFromChange: 0.1, toClient: 0.2 });
+});
+
+test("total cobrado del turno: efectivo + transferencias + tarjeta, neto de lo reembolsado", () => {
+  const m = (method: string, label: string, is_cash: boolean, total: number, refunded = 0) => ({ method, label, is_cash, count: 1, total, refunded });
+  const c = collectedTotals([m("efectivo", "Efectivo", true, 3000, 200), m("transferencia", "Transferencia", false, 1700), m("tarjeta", "Tarjeta", false, 800, 100)]);
+  assert.equal(c.cash, 2800);
+  assert.equal(c.nonCash, 2400);
+  assert.equal(c.total, 5200);
+  assert.deepEqual(c.lines.map((l) => [l.label, l.net]), [["Efectivo", 2800], ["Transferencia", 1700], ["Tarjeta", 700]]);
+  assert.deepEqual(collectedTotals([]), { total: 0, cash: 0, nonCash: 0, lines: [] });
+  assert.equal(collectedTotals([m("efectivo", "Efectivo", true, 0.1), m("transferencia", "Transferencia", false, 0.2)]).total, 0.3);
 });

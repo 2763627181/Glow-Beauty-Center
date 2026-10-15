@@ -11,6 +11,7 @@ import { applyClientSearch, cleanTerm } from "@/lib/data/client-search";
 import { drToISO } from "@/lib/format";
 import { allowed } from "@/lib/permissions";
 import { createClient } from "@/lib/supabase/server";
+import { nameCol, nameLike, saleNamesInstalled } from "@/lib/data/sale-names";
 
 export const metadata = { title: "Ventas" };
 const SIZE = 30;
@@ -30,8 +31,9 @@ export default async function SalesPage({ searchParams }: PageProps<"/admin/sale
   const { data: methods } = await sb.from("payment_methods").select("key,label");
   const label = new Map((methods ?? []).map((m) => [m.key, m.label]));
 
+  const names = await saleNamesInstalled();
   let q = sb.from("sales")
-    .select("id,sale_number,completed_at,subtotal,discount,total,payment_status,voided_at,client:clients(first_name,last_name),employee:employees(full_name),sale_items(description,team_id),payments(method,status)", { count: "exact" })
+    .select(`id,sale_number,completed_at,${nameCol(names)}subtotal,discount,total,payment_status,voided_at,client:clients(first_name,last_name),employee:employees(full_name),sale_items(description,team_id),payments(method,status)`, { count: "exact" })
     .order("completed_at", { ascending: false }).range((page - 1) * SIZE, page * SIZE - 1);
   if (["pendiente", "parcial", "pagado", "reembolsado"].includes(status)) q = q.eq("payment_status", status);
   if (from) q = q.gte("completed_at", drToISO(from, "00:00"));
@@ -40,7 +42,7 @@ export default async function SalesPage({ searchParams }: PageProps<"/admin/sale
     const { data: cl } = await applyClientSearch(sb.from("clients").select("id"), search).limit(100);
     const ids = (cl ?? []).map((c) => c.id);
     const term = cleanTerm(search);
-    q = q.or([ids.length ? `client_id.in.(${ids.join(",")})` : null, `sale_number.ilike.%${term}%`].filter(Boolean).join(","));
+    q = q.or([ids.length ? `client_id.in.(${ids.join(",")})` : null, `sale_number.ilike.%${term}%`, nameLike(names, term)].filter(Boolean).join(","));
   }
   const { data, count } = await q;
   const pages = Math.max(1, Math.ceil((count ?? 0) / SIZE));
@@ -68,7 +70,7 @@ export default async function SalesPage({ searchParams }: PageProps<"/admin/sale
       <div className={u.card}>
         {!data?.length ? <EmptyState title="Sin ventas" text={search || from || to || status ? "No hay ventas con estos filtros." : "Las ventas de citas se crean solas al completarlas; también puedes registrar una venta rápida."} /> : (
           <SalesTable canDelete={allowed(session.role, "deleteRecords")} rows={data.map((s: any) => ({
-            id: s.id, sale_number: s.sale_number, completed_at: s.completed_at, client: s.client ? `${s.client.first_name} ${s.client.last_name}` : "Mostrador",
+            id: s.id, sale_number: s.sale_number, completed_at: s.completed_at, client: s.client ? `${s.client.first_name} ${s.client.last_name}` : s.customer_name ?? "Mostrador",
             services: uniqueDescriptions(s.sale_items).join(", "), employee: s.employee?.full_name ?? "—", subtotal: Number(s.subtotal), discount: Number(s.discount), total: Number(s.total),
             methods: [...new Set(s.payments.filter((p: any) => p.status === "pagado").map((p: any) => label.get(p.method) ?? p.method))].join(", "),
             payment_status: s.payment_status, voided: !!s.voided_at,

@@ -7,6 +7,7 @@ import { requireAccess } from "@/lib/auth";
 import { fmtDate, fmtTime, money } from "@/lib/format";
 import { allowed } from "@/lib/permissions";
 import { createClient } from "@/lib/supabase/server";
+import { nameCol, saleNamesInstalled } from "@/lib/data/sale-names";
 
 export const metadata = { title: "Cobros" };
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -14,9 +15,10 @@ export const metadata = { title: "Cobros" };
 export default async function PaymentsPage() {
   const s = await requireAccess("payments");
   const sb = await createClient();
+  const names = await saleNamesInstalled();
   const [{ data: pays }, { data: owed }, { data: open }, { data: methods }] = await Promise.all([
     sb.from("payments").select("id,amount,method,reference,status,paid_at,appointment_id,sale:sales(id,sale_number,voided_at,client:clients(first_name,last_name))").order("paid_at", { ascending: false }).limit(80),
-    sb.from("sales").select("id,sale_number,total,payment_status,completed_at,client:clients(first_name,last_name),payments(amount,status)").in("payment_status", ["pendiente", "parcial"]).is("voided_at", null).order("completed_at", { ascending: false }).limit(60),
+    sb.from("sales").select(`id,sale_number,total,payment_status,completed_at,${nameCol(names)}client:clients(first_name,last_name),payments(amount,status)`).in("payment_status", ["pendiente", "parcial"]).is("voided_at", null).order("completed_at", { ascending: false }).limit(60),
     sb.from("appointments").select("id,start_time,status,client:clients(first_name,last_name)").in("status", ["en_espera", "en_servicio"]).order("start_time").limit(30),
     sb.from("payment_methods").select("key,label"),
   ]);
@@ -42,7 +44,7 @@ export default async function PaymentsPage() {
                 const paid = v.payments.filter((p: any) => p.status === "pagado").reduce((t: number, p: any) => t + Number(p.amount), 0);
                 return (
                   <li key={v.id} style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
-                    <Link className={u.link} href={`/admin/sales/${v.id}`}>{v.sale_number} · {v.client?.first_name ?? "Mostrador"}</Link>
+                    <Link className={u.link} href={`/admin/sales/${v.id}`}>{v.sale_number} · {v.client?.first_name ?? v.customer_name ?? "Mostrador"}</Link>
                     <span><PayBadge status={v.payment_status} /> debe <strong>{money(Number(v.total) - paid)}</strong></span>
                   </li>
                 );

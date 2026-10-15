@@ -921,6 +921,33 @@ try {
   await q("delete from supplies where id=$1", [supId]);
   check("inventario: al borrar un producto se van sus entradas y servicios", (await q("select count(*) c from supply_lots where supply_id=$1", [supId])).rows[0].c === "0" && (await q("select count(*) c from supply_services where supply_id=$1", [supId])).rows[0].c === "0");
 
+  /* ───────── nombre del cliente en la venta de mostrador y totales de la caja ───────── */
+  console.log("\n— Nombre del cliente en la venta —");
+  await asUser(uManager);
+  let sesAbierta = (await q("select id from cash_sessions where closed_at is null")).rows[0];
+  if (!sesAbierta) sesAbierta = (await q("select open_cash_session(0) r")).rows[0].r;
+  const sesId = sesAbierta.id;
+  await asUser(uRecep);
+  const ventaNombre = (await q("select create_quick_sale($1::jsonb) r", [JSON.stringify({ customer_name: "  María Pérez  ", items: [{ description: "Producto", quantity: 1, unit_price: 500 }], payments: [{ method: "transferencia", amount: 500 }] })])).rows[0].r;
+  check("nombre: la venta sin cliente registrado guarda el nombre escrito (sin espacios de más)", (await q("select customer_name n, client_id from sales where id=$1", [ventaNombre.sale_id])).rows[0].n === "María Pérez");
+  await asUser(uManager);
+  const repN0 = (await q("select cash_session_report($1) r", [sesId])).rows[0].r;
+  const pay0 = repN0.payments.find((p) => p.sale_id === ventaNombre.sale_id);
+  check("nombre: el movimiento de la caja muestra el nombre del cliente y la factura", pay0 && pay0.client === "María Pérez" && /^GBC-/.test(pay0.sale_number));
+  const tm = repN0.methods.find((m) => m.method === "transferencia");
+  check("nombre: lo cobrado por transferencia está en el reporte del turno (para el total cobrado)", tm && Number(tm.total) >= 500 && tm.is_cash === false);
+  await asUser(uRecep);
+  const ventaBlanco = (await q("select create_quick_sale($1::jsonb) r", [JSON.stringify({ customer_name: "   ", items: [{ description: "Producto", quantity: 1, unit_price: 100 }], payments: [{ method: "tarjeta", amount: 100 }] })])).rows[0].r;
+  check("nombre: un nombre en blanco no se guarda", (await q("select customer_name n from sales where id=$1", [ventaBlanco.sale_id])).rows[0].n === null);
+  const regCli = (await q("select id, first_name || ' ' || last_name nm from clients limit 1")).rows[0];
+  const withCli = (await q("select create_quick_sale($1::jsonb) r", [JSON.stringify({ client_id: regCli.id, customer_name: "Otro Nombre", items: [{ description: "Producto", quantity: 1, unit_price: 100 }], payments: [{ method: "tarjeta", amount: 100 }] })])).rows[0].r;
+  check("nombre: si hay cliente registrado manda su nombre y no se guarda el escrito", (await q("select customer_name n from sales where id=$1", [withCli.sale_id])).rows[0].n === null);
+  await asUser(uManager);
+  const repN1 = (await q("select cash_session_report($1) r", [sesId])).rows[0].r;
+  check("nombre: con cliente registrado, la caja muestra el nombre del cliente", repN1.payments.find((p) => p.sale_id === withCli.sale_id)?.client === regCli.nm.trim());
+  await asAdmin();
+  await expectErr("nombre: no más de 80 letras", "update sales set customer_name = repeat('x', 81) where id=$1", [ventaNombre.sale_id], "sales_customer_name_ck");
+
 } catch (e) {
   console.error("ERROR inesperado:", e.message);
   fails++;

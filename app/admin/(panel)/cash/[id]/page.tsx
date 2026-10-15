@@ -8,6 +8,7 @@ import u from "@/components/admin/ui.module.css";
 import { requireAccess } from "@/lib/auth";
 import { getCashReport, getOpenSessionId, listCashSessions } from "@/lib/data/cash";
 import { getSettings } from "@/lib/data/catalog";
+import { collectedTotals } from "@/lib/domain/cash";
 import { fmtDateTime, money } from "@/lib/format";
 import { allowed } from "@/lib/permissions";
 
@@ -23,6 +24,8 @@ export default async function CashSessionPage({ params }: PageProps<"/admin/cash
   if (!closedAt) redirect("/admin/cash");
   const [recent, openId, settings] = await Promise.all([listCashSessions(1), getOpenSessionId(), getSettings()]);
   const s = report.session, t = report.totals, diff = s.difference ?? 0;
+  const col = collectedTotals(report.methods);
+  const aside = col.lines.filter((l) => !l.is_cash && l.net !== 0);
   const canReopen = allowed(session.role, "voidCash") && recent[0]?.id === s.id && !openId;
   const row = (label: string, value: string, strong?: boolean) => (
     <div key={label}>{strong ? <strong>{label}</strong> : <span>{label}</span>}{strong ? <strong>{value}</strong> : <span>{value}</span>}</div>
@@ -52,6 +55,15 @@ export default async function CashSessionPage({ params }: PageProps<"/admin/cash
             {s.opened_by && <>Abrió: {s.opened_by}. </>}{s.closed_by && <>Cerró: {s.closed_by}. </>}
             {s.opening_note && <>Nota de apertura: {s.opening_note}. </>}{s.closing_note && <>Nota de cierre: {s.closing_note}</>}
           </p>
+        </section>
+        <section className={u.card} aria-label="Total cobrado en el turno">
+          <h2>Total cobrado en el turno</h2>
+          <div className={c.summaryGrid}>
+            {row("Efectivo cobrado", money(col.cash))}
+            {aside.map((l) => row(`${l.label} (cobrado aparte)`, money(l.net)))}
+            {row("Total cobrado (todos los métodos)", money(col.total), true)}
+          </div>
+          <p className={u.hint} style={{ marginTop: 8 }}>El cuadre de la gaveta cuenta solo el efectivo; las transferencias y la tarjeta se verifican en el banco o el datáfono.</p>
         </section>
         <section className={u.card}><h2>Movimientos del turno</h2><Timeline report={report} /></section>
         <section className={u.card}><h2>Producción por especialista</h2><ProductionTable rows={report.production} /></section>

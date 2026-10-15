@@ -5,6 +5,7 @@ import { can } from "@/lib/permissions";
 import { staffLabel } from "@/lib/domain/staffLabel";
 import { mergeTemplates, type WaTemplates } from "@/lib/domain/whatsappTemplates";
 import { createClient } from "@/lib/supabase/server";
+import { saleNamesInstalled } from "./sale-names";
 import { listServiceOptions, type ServiceOption } from "./options";
 
 export type AdminData = {
@@ -21,6 +22,8 @@ export type AdminData = {
    * `lastCounted` = efectivo contado en el último cierre (sugerencia para el fondo inicial).
    */
   cash: { ready: boolean; open: { id: string; number: string; openedAt: string; openingAmount: number } | null; lastCounted: number | null };
+  /** La base ya tiene la columna del nombre del cliente en las ventas (si no, «Nueva venta» no pide el nombre). */
+  saleNames: boolean;
   templates: WaTemplates;
   business: { name: string; whatsapp: string };
 };
@@ -57,7 +60,7 @@ async function loadCash(sb: Sb, s: Session): Promise<AdminData["cash"]> {
 /** Datos de referencia que casi todas las pantallas del panel necesitan (se cargan una vez en el layout). */
 export async function loadAdminData(s: Session): Promise<AdminData> {
   const sb = await createClient();
-  const [staff, links, products, methods, settings, options, cash] = await Promise.all([
+  const [staff, links, products, methods, settings, options, cash, saleNames] = await Promise.all([
     loadStaff(sb),
     sb.from("employee_services").select("employee_id,service_id"),
     sb.from("products").select("id,name,price").eq("active", true).order("display_order").order("name"),
@@ -65,6 +68,7 @@ export async function loadAdminData(s: Session): Promise<AdminData> {
     sb.from("business_settings").select("key,value").in("key", ["business", "whatsapp_templates"]),
     listServiceOptions(true),
     loadCash(sb, s),
+    saleNamesInstalled(),
   ]);
   const map = Object.fromEntries((settings.data ?? []).map((r) => [r.key, r.value as Record<string, unknown>]));
   return {
@@ -72,7 +76,7 @@ export async function loadAdminData(s: Session): Promise<AdminData> {
     staff, options, links: links.data ?? [],
     products: (products.data ?? []).map((p) => ({ ...p, price: Number(p.price) })),
     paymentMethods: methods.length ? methods : [{ key: "efectivo", label: "Efectivo", isCash: true }],
-    cash,
+    cash, saleNames,
     templates: mergeTemplates(map.whatsapp_templates),
     business: {
       name: typeof map.business?.name === "string" && map.business.name ? map.business.name : DEFAULT_BUSINESS.name,

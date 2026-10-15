@@ -7,7 +7,7 @@ import { voidCashMovement } from "@/lib/actions/admin/cash";
 import type { CashSessionRow, LooseCash, OwedSale } from "@/lib/data/cash";
 import type { ApptRow } from "@/lib/data/appointments";
 import { apptTotal } from "@/lib/data/appointment-math";
-import { MOVE_LABEL, type CashMovement, type CashReport, type ProductionRow } from "@/lib/domain/cash";
+import { collectedTotals, MOVE_LABEL, type CashMovement, type CashReport, type ProductionRow } from "@/lib/domain/cash";
 import { serviceNames } from "@/lib/domain/serviceLines";
 import { fmtDate, fmtDateTime, fmtTime, money } from "@/lib/format";
 import { useAdmin, useCan } from "../AdminContext";
@@ -39,7 +39,8 @@ export function CashDesk({ report, queue, sessions, loose }: { report: CashRepor
   const [modal, setModal] = useState<Dialog | null>(null);
   const close = () => setModal(null);
   const t = report?.totals;
-  const aside = report ? report.methods.filter((m) => !m.is_cash).reduce((s, m) => s + m.total - m.refunded, 0) : 0;
+  const col = report ? collectedTotals(report.methods) : null;
+  const aside = col?.nonCash ?? 0;
 
   return (
     <div className={c.stack}>
@@ -85,7 +86,8 @@ export function CashDesk({ report, queue, sessions, loose }: { report: CashRepor
           <div className={`${u.card} ${u.stat}`}><span>Salidas</span><strong>{money(t.salidas)}</strong></div>
           <div className={`${u.card} ${u.stat}`}><span>Entradas</span><strong>{money(t.entradas)}</strong></div>
           <div className={`${u.card} ${u.stat} ${c.expected}`}><span>Efectivo que debe haber</span><strong>{money(t.expected)}</strong></div>
-          <div className={`${u.card} ${u.stat}`}><span>Tarjeta y transferencia</span><strong>{money(aside)}</strong><small>Cobrado aparte; solo se registra</small></div>
+          <div className={`${u.card} ${u.stat}`}><span>Transferencias y tarjeta</span><strong>{money(aside)}</strong><small>{col!.lines.filter((l) => !l.is_cash && l.net !== 0).map((l) => `${l.label} ${money(l.net)}`).join(" · ") || "Cobrado aparte; solo se registra"}</small></div>
+          <div className={`${u.card} ${u.stat}`} style={{ background: "var(--color-blush)" }}><span>Total cobrado en el turno</span><strong>{money(col!.total)}</strong><small>Efectivo {money(col!.cash)}{col!.lines.filter((l) => !l.is_cash && l.net !== 0).map((l) => ` · ${l.label} ${money(l.net)}`).join("")}</small></div>
         </div>
       )}
 
@@ -150,7 +152,7 @@ export function CashDesk({ report, queue, sessions, loose }: { report: CashRepor
       </section>
 
       {modal?.type === "open" && <OpenCashModal suggested={cash.lastCounted} onClose={close} />}
-      {modal?.type === "close" && t && <CloseCashModal totals={t} onClose={close} />}
+      {modal?.type === "close" && t && report && <CloseCashModal totals={t} methods={report.methods} onClose={close} />}
       {modal?.type === "move" && t && <MovementModal kind={modal.kind} expected={t.expected} preset={modal.preset} onClose={close} />}
       {modal?.type === "pay" && <PaymentModal appt={modal.appt} onClose={close} onDone={() => { /* la pantalla se actualiza sola al registrar */ }} completeByDefault={modal.appt.status !== "confirmado"} />}
       {modal?.type === "salepay" && <SalePayModal saleId={modal.sale.id} pending={Math.max(modal.sale.total - modal.sale.paid, 0)} onClose={close} onDone={() => { /* ídem */ }} />}

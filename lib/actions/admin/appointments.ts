@@ -175,7 +175,7 @@ export async function updateSaleNotes(saleId: string, notes: string): Promise<Ac
 }
 
 const quickSchema = z.object({
-  client_id: z.uuid().nullish(), employee_id: z.uuid().nullish(), discount: z.number().min(0).optional(), tip: z.number().min(0).optional(),
+  client_id: z.uuid().nullish(), customer_name: z.string().trim().max(80, "El nombre es demasiado largo (máximo 80 letras)").optional(), employee_id: z.uuid().nullish(), discount: z.number().min(0).optional(), tip: z.number().min(0).optional(),
   notes: z.string().max(500).optional(), allow_overpay: z.boolean().optional(),
   items: z.array(z.object({ description: z.string().trim().min(1, "Cada artículo necesita un nombre"), quantity: z.number().int().min(1), unit_price: z.number().min(0, "El precio no puede ser negativo"), service_id: z.uuid().nullish() })).min(1, "Agrega al menos un artículo"),
   payments: z.array(paySchema.pick({ amount: true, method: true, reference: true, tendered: true })).optional(),
