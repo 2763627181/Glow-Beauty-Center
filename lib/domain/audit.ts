@@ -11,7 +11,7 @@ export const ENTITY_LABEL: Record<string, string> = {
 
 export const ACTION_LABEL: Record<string, string> = {
   insert: "Creó", update: "Editó", delete: "Eliminó", delete_records: "Eliminó (varios)", complete_appointment: "Completó cita", void_sale: "Anuló venta", quick_sale: "Venta rápida",
-  open_cash_session: "Abrió caja", close_cash_session: "Cerró caja", reopen_cash_session: "Reabrió caja",
+  open_cash_session: "Abrió caja", close_cash_session: "Cerró caja", reopen_cash_session: "Reabrió caja", change_payment_method: "Cambió el método de un cobro",
 };
 
 const FIELD_LABEL: Record<string, string> = {

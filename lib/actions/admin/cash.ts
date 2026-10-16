@@ -71,6 +71,17 @@ export async function voidCashMovement(id: string, why: string): Promise<ActionR
   return { ok: true, expected: Number(data.expected) };
 }
 
+/** Corrige el método de un cobro ya registrado (por ejemplo, una tarjeta que se guardó como efectivo). Solo gerente y super administrador. */
+export async function changePaymentMethod(id: string, method: string, why?: string): Promise<ActionResult<{ amount: number; wasCash: boolean; isCash: boolean }>> {
+  await requireAction("voidOrRefund");
+  const p = z.object({ id: z.uuid(), method: z.string().trim().min(1, "Elige el método de pago.").max(40), why: note }).safeParse({ id, method, why });
+  if (!p.success) return { ok: false, error: p.error.issues[0].message };
+  const { data, error } = await (await createClient()).rpc("change_payment_method", { p_payment: p.data.id, p_method: p.data.method, p_reason: p.data.why || null });
+  if (error) return fail(error.message);
+  refresh();
+  return { ok: true, amount: Number(data.amount), wasCash: !!data.was_cash, isCash: !!data.is_cash };
+}
+
 export async function reopenCash(id: string, why: string): Promise<ActionResult> {
   await requireAction("voidCash");
   const p = z.object({ id: z.uuid(), why: reason }).safeParse({ id, why });

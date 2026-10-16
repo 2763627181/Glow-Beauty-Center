@@ -5,6 +5,7 @@ import { PageHead, PayBadge } from "@/components/admin/primitives";
 import r from "@/components/admin/sales/sales.module.css";
 import { SaleActions } from "@/components/admin/sales/SaleActions";
 import u from "@/components/admin/ui.module.css";
+import { ChangeMethodButton } from "@/components/admin/sales/ChangeMethodButton";
 import { RefundButton } from "@/components/admin/sales/RefundButton";
 import { requireAccess } from "@/lib/auth";
 import { getSettings } from "@/lib/data/catalog";
@@ -55,7 +56,7 @@ export default async function SalePage({ params }: PageProps<"/admin/sales/[id]"
             <span>{label.get(p.method) ?? p.method}{p.reference && ` · ${p.reference}`}{p.status === "reembolsado" && " (reembolsado)"} <span className={u.sub}>{fmtDate(p.paid_at, { day: "numeric", month: "short" })}</span>{p.tendered != null && Number(p.tendered) > Number(p.amount) && <span className={u.sub}> · recibido {money(p.tendered)} · vuelto {money(Number(p.tendered) - Number(p.amount))}</span>}</span>
             <span style={{ display: "inline-flex", gap: 10, alignItems: "center" }}>
               {money(p.amount)}
-              {!voided && p.status === "pagado" && allowed(session.role, "voidOrRefund") && <span className={r.noprint}><RefundButton paymentId={p.id} /></span>}
+              {!voided && p.status === "pagado" && allowed(session.role, "voidOrRefund") && <span className={r.noprint} style={{ display: "inline-flex", gap: 8 }}><ChangeMethodButton payment={{ id: p.id, amount: Number(p.amount), method: p.method }} who={s.client ? `${s.client.first_name} ${s.client.last_name}` : s.customer_name} /><RefundButton paymentId={p.id} /></span>}
             </span>
           </div>
         ))}

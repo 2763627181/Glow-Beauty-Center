@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import {
-  buildTimeline, cashEffect, changeOf, MOVE_LABEL, splitProduction, type CashMethodRow, type CashMovement, type ProductionRow, type TimelineRow, type CashReport,
+  buildTimeline, cashEffect, changeOf, MOVE_LABEL, splitProduction, type CashMethodRow, type CashMovement, type CashPayment, type ProductionRow, type TimelineRow, type CashReport,
 } from "@/lib/domain/cash";
 import { fmtTime, fmtDate, money } from "@/lib/format";
 import { useAdmin } from "../AdminContext";
@@ -21,7 +21,7 @@ function useStaffLabel() {
   return (id: string | null, name: string | null) => (id ? staff.find((s) => s.id === id)?.label : undefined) ?? name;
 }
 
-export function Timeline({ report, onVoid }: { report: Pick<CashReport, "payments" | "movements">; onVoid?: (m: CashMovement) => void }) {
+export function Timeline({ report, onVoid, onChangeMethod }: { report: Pick<CashReport, "payments" | "movements">; onVoid?: (m: CashMovement) => void; onChangeMethod?: (p: CashPayment) => void }) {
   const rows = buildTimeline(report);
   const who = useStaffLabel();
   if (!rows.length) return <EmptyState title="Sin movimientos todavía" text="Aquí aparecen los cobros, reembolsos y las entradas y salidas de efectivo." />;
@@ -30,14 +30,14 @@ export function Timeline({ report, onVoid }: { report: Pick<CashReport, "payment
       <table className={`${u.table} ${u.stack}`}>
         <thead><tr><th>Hora</th><th>Concepto</th><th>Detalle</th><th className={u.num}>Monto</th><th className={u.num}>En la caja</th><th><span className="sr-only">Acciones</span></th></tr></thead>
         <tbody>
-          {rows.map((r) => <TimelineLine key={r.key} row={r} onVoid={onVoid} who={who} />)}
+          {rows.map((r) => <TimelineLine key={r.key} row={r} onVoid={onVoid} onChangeMethod={onChangeMethod} who={who} />)}
         </tbody>
       </table>
     </div>
   );
 }
 
-function TimelineLine({ row, onVoid, who }: { row: TimelineRow; onVoid?: (m: CashMovement) => void; who: (id: string | null, name: string | null) => string | null }) {
+function TimelineLine({ row, onVoid, onChangeMethod, who }: { row: TimelineRow; onVoid?: (m: CashMovement) => void; onChangeMethod?: (p: CashPayment) => void; who: (id: string | null, name: string | null) => string | null }) {
   const effect = cashEffect(row);
   if (row.type === "movimiento") {
     const m = row.movement;
@@ -75,14 +75,16 @@ function TimelineLine({ row, onVoid, who }: { row: TimelineRow; onVoid?: (m: Cas
       </td>
       <td data-label="Monto" className={u.num}>{money(p.amount)}</td>
       <td data-label="En la caja" className={`${u.num} ${effect > 0 ? c.pos : effect < 0 ? c.neg : c.muted}`}>{signed(effect)}</td>
-      <td />
+      <td>{onChangeMethod && !refund && p.status === "pagado" && <Button size="sm" variant="secondary" onClick={() => onChangeMethod(p)} aria-label={`Cambiar el método del cobro de ${money(p.amount)}${p.client ? ` de ${p.client}` : ""}`}>Cambiar método</Button>}</td>
     </tr>
   );
 }
 
-export function MethodsTable({ methods }: { methods: CashMethodRow[] }) {
+export function MethodsTable({ methods, payments }: { methods: CashMethodRow[]; payments?: CashPayment[] }) {
   if (!methods.length) return <EmptyState title="Sin cobros en este turno" />;
+  const payers = methods.filter((m) => !m.is_cash).map((m) => ({ method: m, list: (payments ?? []).filter((p) => p.method === m.method && p.paid_in_turn) })).filter((g) => g.list.length);
   return (
+    <>
     <div className={u.tableWrap} role="region" aria-label="Tabla de cobrado por método" tabIndex={0}>
       <table className={`${u.table} ${u.stack}`}>
         <thead><tr><th>Método</th><th className={u.num}>Cobros</th><th className={u.num}>Cobrado</th><th className={u.num}>Reembolsado</th></tr></thead>
@@ -98,6 +100,21 @@ export function MethodsTable({ methods }: { methods: CashMethodRow[] }) {
         </tbody>
       </table>
     </div>
+    {payers.length > 0 && (
+      <div role="group" aria-label="Quién pagó cada cobro aparte">
+        {payers.map((g) => (
+          <div key={g.method.method} className={c.payersBox}>
+            <p className={c.payersHead}><strong>{g.method.label}</strong> · quién pagó</p>
+            <ul className={c.payers}>
+              {g.list.map((p) => (
+                <li key={p.id}><span className={p.status === "reembolsado" ? c.struck : undefined}>{p.client ?? "Mostrador"}</span><span className={p.status === "reembolsado" ? c.struck : undefined}>{money(p.amount)}</span></li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    )}
+    </>
   );
 }
 

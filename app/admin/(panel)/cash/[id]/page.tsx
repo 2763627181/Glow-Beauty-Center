@@ -67,7 +67,7 @@ export default async function CashSessionPage({ params }: PageProps<"/admin/cash
         </section>
         <section className={u.card}><h2>Movimientos del turno</h2><Timeline report={report} /></section>
         <section className={u.card}><h2>Producción por especialista</h2><ProductionTable rows={report.production} /></section>
-        <section className={u.card}><h2>Cobrado por método</h2><MethodsTable methods={report.methods} /></section>
+        <section className={u.card}><h2>Cobrado por método</h2><MethodsTable methods={report.methods} payments={report.payments} /></section>
       </div>
     </>
   );

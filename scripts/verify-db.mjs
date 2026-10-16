@@ -948,6 +948,39 @@ try {
   await asAdmin();
   await expectErr("nombre: no más de 80 letras", "update sales set customer_name = repeat('x', 81) where id=$1", [ventaNombre.sale_id], "sales_customer_name_ck");
 
+  /* ───────── corregir el método de un cobro (una tarjeta que se guardó como efectivo) ───────── */
+  console.log("\n— Corregir el método de un cobro —");
+  await asUser(uRecep);
+  const malCobro = (await q("select create_quick_sale($1::jsonb) r", [JSON.stringify({ customer_name: "Cobro mal registrado", items: [{ description: "Producto", quantity: 1, unit_price: 850 }], payments: [{ method: "efectivo", amount: 850, tendered: 1000 }] })])).rows[0].r;
+  const malPago = (await q("select id from payments where sale_id=$1", [malCobro.sale_id])).rows[0].id;
+  await asUser(uManager);
+  const esperadoAntes = Number((await q("select cash_session_report($1) r", [sesId])).rows[0].r.totals.expected);
+  await asUser(uRecep);
+  await expectErr("método: recepción no puede cambiar el método de un cobro", "select change_payment_method($1, 'tarjeta')", [malPago], "forbidden");
+  await asUser(uManager);
+  await expectErr("método: el mismo método no se cambia", "select change_payment_method($1, 'efectivo')", [malPago], "same_method");
+  await expectErr("método: un método que no existe se rechaza", "select change_payment_method($1, 'metodo_falso')", [malPago], "invalid_method");
+  await expectErr("método: un cobro que no existe se rechaza", "select change_payment_method(gen_random_uuid(), 'tarjeta')", [], "payment_not_found");
+  const cambio = (await q("select change_payment_method($1, 'tarjeta', '  Fue con tarjeta  ') r", [malPago])).rows[0].r;
+  const trasCambio = (await q("select method, tendered from payments where id=$1", [malPago])).rows[0];
+  check("método: el cobro en efectivo pasa a tarjeta y se borra el «recibido»", trasCambio.method === "tarjeta" && trasCambio.tendered === null && cambio.was_cash === true && cambio.is_cash === false);
+  const repTarjeta = (await q("select cash_session_report($1) r", [sesId])).rows[0].r;
+  check("método: el efectivo que debe haber baja lo mismo que el cobro", Math.abs(esperadoAntes - Number(repTarjeta.totals.expected) - 850) < 0.005);
+  const pagoEnReporte = repTarjeta.payments.find((p) => p.id === malPago);
+  check("método: el reporte de la caja lo muestra como tarjeta (cobrado aparte) con el nombre del cliente", pagoEnReporte?.method === "tarjeta" && pagoEnReporte?.is_cash === false && pagoEnReporte?.client === "Cobro mal registrado");
+  const auditoria = (await q("select before_data b, after_data a from audit_logs where action='change_payment_method' and entity_id=$1", [malPago])).rows[0];
+  check("método: queda en Auditoría con el método anterior, el nuevo y el motivo", auditoria && auditoria.b.method === "efectivo" && auditoria.a.method === "tarjeta" && auditoria.a.reason === "Fue con tarjeta");
+  await q("select change_payment_method($1, 'efectivo')", [malPago]);
+  const deVuelta = (await q("select method, tendered, amount from payments where id=$1", [malPago])).rows[0];
+  check("método: de tarjeta a efectivo queda recibido exacto (sin vuelto)", deVuelta.method === "efectivo" && Number(deVuelta.tendered) === Number(deVuelta.amount));
+  check("método: y el efectivo que debe haber vuelve a su valor", Math.abs(Number((await q("select cash_session_report($1) r", [sesId])).rows[0].r.totals.expected) - esperadoAntes) < 0.005);
+  await q("select change_payment_method($1, 'tarjeta')", [malPago]);
+  await q("select refund_payment($1)", [malPago]);
+  await expectErr("método: un cobro reembolsado no se puede cambiar", "select change_payment_method($1, 'transferencia')", [malPago], "payment_not_paid");
+  const otroPago = (await q("select id from payments where sale_id=$1 limit 1", [ventaNombre.sale_id])).rows[0].id;
+  await q("select close_cash_session($1)", [Number((await q("select cash_session_report($1) r", [sesId])).rows[0].r.totals.expected)]);
+  await expectErr("método: un cobro dentro de una caja ya cerrada no se puede cambiar", "select change_payment_method($1, 'tarjeta')", [otroPago], "payment_in_closed_cash");
+
 } catch (e) {
   console.error("ERROR inesperado:", e.message);
   fails++;

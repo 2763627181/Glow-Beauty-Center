@@ -94,7 +94,7 @@ try {
     section("Caja: movimientos y total con transferencias");
     await step("«Movimientos del turno» muestra «Factura GBC-… · nombre»", async () => {
       await page.goto(BASE + "/admin/cash");
-      const row = page.locator("tr", { hasText: NAME });
+      const row = page.getByRole("region", { name: "Tabla de movimientos del turno" }).locator("tr", { hasText: NAME });
       await expectVisible(row, "el cobro con el nombre del cliente");
       const t = await row.innerText();
       assert(/Factura GBC-\d{6}-\d{5}/.test(t) && t.includes(NAME) && t.includes("Transferencia") && t.includes("RD$ 1,700"), t.replace(/\s+/g, " "));

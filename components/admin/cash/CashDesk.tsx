@@ -7,7 +7,7 @@ import { voidCashMovement } from "@/lib/actions/admin/cash";
 import type { CashSessionRow, LooseCash, OwedSale } from "@/lib/data/cash";
 import type { ApptRow } from "@/lib/data/appointments";
 import { apptTotal } from "@/lib/data/appointment-math";
-import { collectedTotals, MOVE_LABEL, type CashMovement, type CashReport, type ProductionRow } from "@/lib/domain/cash";
+import { collectedTotals, MOVE_LABEL, type CashMovement, type CashPayment, type CashReport, type ProductionRow } from "@/lib/domain/cash";
 import { serviceNames } from "@/lib/domain/serviceLines";
 import { fmtDate, fmtDateTime, fmtTime, money } from "@/lib/format";
 import { useAdmin, useCan } from "../AdminContext";
@@ -17,6 +17,7 @@ import { QuickSale } from "../sales/QuickSale";
 import { SalePayModal } from "../sales/SalePayModal";
 import u from "../ui.module.css";
 import c from "./cash.module.css";
+import { ChangeMethodModal } from "./ChangeMethodModal";
 import { CloseCashModal } from "./CloseCashModal";
 import { MovementModal, type MovementPreset } from "./MovementModal";
 import { OpenCashModal } from "./OpenCashModal";
@@ -28,13 +29,14 @@ type Dialog =
   | { type: "open" } | { type: "close" }
   | { type: "move"; kind: "entrada" | "salida"; preset?: MovementPreset }
   | { type: "pay"; appt: ApptRow } | { type: "salepay"; sale: OwedSale }
-  | { type: "void"; movement: CashMovement };
+  | { type: "void"; movement: CashMovement } | { type: "method"; payment: CashPayment };
 
 /** La caja: abrir y cerrar el turno, cobrar lo pendiente, registrar entradas y salidas de efectivo y ver la producción de cada especialista. */
 export function CashDesk({ report, queue, sessions, loose }: { report: CashReport | null; queue: { appointments: ApptRow[]; sales: OwedSale[] }; sessions: CashSessionRow[]; loose: LooseCash }) {
   const { cash } = useAdmin();
   const canManage = useCan("manageCash");
   const canVoid = useCan("voidCash");
+  const canFix = useCan("voidOrRefund");
   const canCharge = useCan("charge");
   const [modal, setModal] = useState<Dialog | null>(null);
   const close = () => setModal(null);
@@ -131,7 +133,7 @@ export function CashDesk({ report, queue, sessions, loose }: { report: CashRepor
         <>
           <section className={u.card} aria-labelledby="cash-moves">
             <h2 id="cash-moves">Movimientos del turno</h2>
-            <Timeline report={report} onVoid={canVoid ? (m) => setModal({ type: "void", movement: m }) : undefined} />
+            <Timeline report={report} onVoid={canVoid ? (m) => setModal({ type: "void", movement: m }) : undefined} onChangeMethod={canFix ? (p) => setModal({ type: "method", payment: p }) : undefined} />
           </section>
           <div className={u.cols2}>
             <section className={u.card} aria-labelledby="cash-prod">
@@ -140,7 +142,7 @@ export function CashDesk({ report, queue, sessions, loose }: { report: CashRepor
             </section>
             <section className={u.card} aria-labelledby="cash-methods">
               <h2 id="cash-methods">Cobrado por método</h2>
-              <MethodsTable methods={report.methods} />
+              <MethodsTable methods={report.methods} payments={report.payments} />
             </section>
           </div>
         </>
@@ -156,6 +158,7 @@ export function CashDesk({ report, queue, sessions, loose }: { report: CashRepor
       {modal?.type === "move" && t && <MovementModal kind={modal.kind} expected={t.expected} preset={modal.preset} onClose={close} />}
       {modal?.type === "pay" && <PaymentModal appt={modal.appt} onClose={close} onDone={() => { /* la pantalla se actualiza sola al registrar */ }} completeByDefault={modal.appt.status !== "confirmado"} />}
       {modal?.type === "salepay" && <SalePayModal saleId={modal.sale.id} pending={Math.max(modal.sale.total - modal.sale.paid, 0)} onClose={close} onDone={() => { /* ídem */ }} />}
+      {modal?.type === "method" && <ChangeMethodModal payment={modal.payment} who={modal.payment.client} onClose={close} />}
       {modal?.type === "void" && (
         <ReasonModal title="Anular movimiento" confirmLabel="Anular movimiento" danger doneMessage="Movimiento anulado" onClose={close}
           text={`Se anula ${MOVE_LABEL[modal.movement.category].toLowerCase()} por ${money(modal.movement.amount)} y ${modal.movement.kind === "salida" ? "el dinero vuelve" : "el dinero sale"} de la caja. Queda en Auditoría y no se puede deshacer.`}
