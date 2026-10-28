@@ -41,7 +41,9 @@ export function InventoryBoard({ supplies, services }: { supplies: SupplyView[];
                   <h2 id={`sup-${s.id}`}><Link className={u.link} href={`/admin/inventory/${s.id}`}>{s.name}</Link></h2>
                   {!s.active && <span className={`${u.badge} ${u.gray}`}>Inactivo</span>}
                 </div>
-                <div className={c.chips} aria-label="Servicios en los que se usa">{s.services.map((x) => <span key={x.id} className={c.svc}>{x.name}</span>)}</div>
+                {s.services.length > 0
+                  ? <div className={c.chips} role="group" aria-label="Servicios en los que se usa">{s.services.map((x) => <span key={x.id} className={c.svc}>{x.name}</span>)}</div>
+                  : <p className={c.muted}>Sin servicios asignados: edita el producto para decir en cuáles se usa.</p>}
                 {inUse ? (
                   <p>
                     <span className={`${c.tag} ${c.tagInfo}`}>En uso</span>{" "}
